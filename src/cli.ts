@@ -6,6 +6,9 @@ import {
   runRequiredFieldValidation,
   runFieldFormatValidation,
   runHappyPathSubmission,
+  runCrossFieldValidation,
+  runDoubleSubmitCheck,
+  runBackButtonCheck,
   ValidationCaseResult,
   SubmissionResult,
 } from "./runner";
@@ -22,7 +25,10 @@ interface FormReport {
   url: string;
   requiredFieldValidation: ValidationCaseResult[];
   formatValidation: ValidationCaseResult[];
+  crossFieldValidation: ValidationCaseResult[];
   happyPathSubmission: SubmissionResult;
+  doubleSubmit: ValidationCaseResult;
+  backButton: ValidationCaseResult;
   summary: FormTally;
 }
 
@@ -55,6 +61,9 @@ async function runForm(config: FormConfig): Promise<FormReport> {
   const format = await runFieldFormatValidation(config);
   printCaseResults("format/pattern validation", format, tally);
 
+  const crossField = await runCrossFieldValidation(config);
+  printCaseResults("cross-field validation", crossField, tally);
+
   const submission = await runHappyPathSubmission(config);
   if (submission.status === "passed") {
     tally.passed++;
@@ -66,6 +75,14 @@ async function runForm(config: FormConfig): Promise<FormReport> {
     console.log(`      - ${check.criterion}: ${check.passed ? "PASS" : "FAIL"} - ${check.message}`);
   }
 
+  const doubleSubmit = await runDoubleSubmitCheck(config);
+  tally[doubleSubmit.status]++;
+  console.log(`  [${tagFor(doubleSubmit.status)}] double-submit check: ${doubleSubmit.message}`);
+
+  const backButton = await runBackButtonCheck(config);
+  tally[backButton.status]++;
+  console.log(`  [${tagFor(backButton.status)}] back-button check: ${backButton.message}`);
+
   console.log(`  Summary: ${tally.passed} passed, ${tally.failed} failed, ${tally.skipped} skipped`);
 
   return {
@@ -73,7 +90,10 @@ async function runForm(config: FormConfig): Promise<FormReport> {
     url: config.url,
     requiredFieldValidation: required,
     formatValidation: format,
+    crossFieldValidation: crossField,
     happyPathSubmission: submission,
+    doubleSubmit,
+    backButton,
     summary: tally,
   };
 }

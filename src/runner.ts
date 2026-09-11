@@ -170,6 +170,192 @@ export async function runFieldFormatValidation(
   return results;
 }
 
+/**
+ * For each scenario in `config.crossFieldValidation`, fills the form with
+ * every field at its valid value except the ones named in the scenario's
+ * `overrides` (e.g. a mismatched confirm-password field), submits, and
+ * asserts the scenario's configured error appears. A config with no
+ * `crossFieldValidation` scenarios is reported with a single "skipped"
+ * result.
+ */
+export async function runCrossFieldValidation(
+  config: FormConfig,
+  options: OpenFormPageOptions & { timeoutMs?: number } = {}
+): Promise<ValidationCaseResult[]> {
+  const timeoutMs = options.timeoutMs ?? 10_000;
+  const cases = config.crossFieldValidation ?? [];
+
+  if (cases.length === 0) {
+    return [
+      {
+        fieldName: "cross-field",
+        value: "",
+        expectedError: "",
+        status: "skipped",
+        message: 'This form has no "crossFieldValidation" scenarios configured to test',
+      },
+    ];
+  }
+
+  const results: ValidationCaseResult[] = [];
+  for (const crossCase of cases) {
+    const session = await openFormPage(config.url, options);
+    try {
+      await fillFormFields(session.page, config, crossCase.overrides, new Set(), timeoutMs);
+      await session.page.locator(config.submitSelector).click();
+      const overrideSummary = JSON.stringify(crossCase.overrides);
+      try {
+        await session.page.locator(crossCase.expectedError).waitFor({ state: "visible", timeout: timeoutMs });
+        results.push({
+          fieldName: crossCase.name,
+          value: overrideSummary,
+          expectedError: crossCase.expectedError,
+          status: "passed",
+          message: `Validation error appeared at "${crossCase.expectedError}" as expected`,
+        });
+      } catch {
+        results.push({
+          fieldName: crossCase.name,
+          value: overrideSummary,
+          expectedError: crossCase.expectedError,
+          status: "failed",
+          message: `Expected validation error at "${crossCase.expectedError}" did not appear within ${timeoutMs}ms`,
+        });
+      }
+    } catch (err) {
+      const reason = err instanceof FormTestAutomationError || err instanceof Error ? err.message : String(err);
+      results.push({
+        fieldName: crossCase.name,
+        value: JSON.stringify(crossCase.overrides),
+        expectedError: crossCase.expectedError,
+        status: "failed",
+        message: `Could not complete this test case: ${reason}`,
+      });
+    } finally {
+      await closeSession(session);
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Fills the form with valid values, clicks submit, then immediately clicks
+ * it again (best-effort — the control may already be gone if the first
+ * click navigated away, which is itself a sign the site prevented a second
+ * submission). Passes if the form still reaches its normal single success
+ * state afterward, rather than an error or inconsistent state.
+ */
+export async function runDoubleSubmitCheck(
+  config: FormConfig,
+  options: OpenFormPageOptions & { timeoutMs?: number } = {}
+): Promise<ValidationCaseResult> {
+  const timeoutMs = options.timeoutMs ?? 10_000;
+  const session = await openFormPage(config.url, options);
+  try {
+    await fillFormFields(session.page, config, {}, new Set(), timeoutMs);
+    const submitLocator = session.page.locator(config.submitSelector);
+    await submitLocator.click();
+    // Best-effort second click. If the page already navigated away, the
+    // element may be detached/stale — that failure is itself evidence a
+    // second submission couldn't happen, so it's swallowed, not reported.
+    await submitLocator.click({ timeout: 1000 }).catch(() => {});
+
+    const checks: boolean[] = [];
+    if (config.success.redirectUrl) {
+      checks.push(
+        await session.page
+          .waitForURL(config.success.redirectUrl, { timeout: timeoutMs })
+          .then(() => true)
+          .catch(() => false)
+      );
+    }
+    if (config.success.message) {
+      checks.push(
+        await session.page
+          .locator(config.success.message.selector)
+          .waitFor({ state: "visible", timeout: timeoutMs })
+          .then(() => true)
+          .catch(() => false)
+      );
+    }
+
+    const passed = checks.length > 0 && checks.every(Boolean);
+    return {
+      fieldName: "double-submit",
+      value: "",
+      expectedError: "",
+      status: passed ? "passed" : "failed",
+      message: passed
+        ? "Clicking submit twice in quick succession still landed on the expected single success state"
+        : "After double-clicking submit, the expected success state was not reached (possible duplicate-submission issue)",
+    };
+  } catch (err) {
+    const reason = err instanceof FormTestAutomationError || err instanceof Error ? err.message : String(err);
+    return {
+      fieldName: "double-submit",
+      value: "",
+      expectedError: "",
+      status: "failed",
+      message: `Could not complete this test case: ${reason}`,
+    };
+  } finally {
+    await closeSession(session);
+  }
+}
+
+/**
+ * Submits the form successfully, then navigates back with the browser's
+ * back button, and asserts the page moves away from the post-submit URL
+ * without error (rather than silently resubmitting or getting stuck).
+ */
+export async function runBackButtonCheck(
+  config: FormConfig,
+  options: OpenFormPageOptions & { timeoutMs?: number } = {}
+): Promise<ValidationCaseResult> {
+  const timeoutMs = options.timeoutMs ?? 10_000;
+  const session = await openFormPage(config.url, options);
+  try {
+    await fillFormFields(session.page, config, {}, new Set(), timeoutMs);
+    await session.page.locator(config.submitSelector).click();
+
+    if (config.success.redirectUrl) {
+      await session.page.waitForURL(config.success.redirectUrl, { timeout: timeoutMs }).catch(() => {});
+    } else if (config.success.message) {
+      await session.page
+        .locator(config.success.message.selector)
+        .waitFor({ state: "visible", timeout: timeoutMs })
+        .catch(() => {});
+    }
+
+    const urlAfterSubmit = session.page.url();
+    await session.page.goBack({ timeout: timeoutMs, waitUntil: "domcontentloaded" });
+    const urlAfterBack = session.page.url();
+
+    const passed = urlAfterBack !== urlAfterSubmit;
+    return {
+      fieldName: "back-button",
+      value: "",
+      expectedError: "",
+      status: passed ? "passed" : "failed",
+      message: passed
+        ? `Browser back navigation moved away from the post-submit URL ("${urlAfterSubmit}" -> "${urlAfterBack}") without error`
+        : `Browser back navigation did not change the URL away from "${urlAfterSubmit}" as expected`,
+    };
+  } catch (err) {
+    const reason = err instanceof FormTestAutomationError || err instanceof Error ? err.message : String(err);
+    return {
+      fieldName: "back-button",
+      value: "",
+      expectedError: "",
+      status: "failed",
+      message: `Could not complete this test case: ${reason}`,
+    };
+  } finally {
+    await closeSession(session);
+  }
+}
+
 export type SuccessCriterionKind = "message" | "redirectUrl" | "response";
 
 export interface SuccessCheckResult {

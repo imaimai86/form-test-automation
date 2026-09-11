@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { ConfigError } from "./errors";
-import { FieldConfig, FieldType, FormConfig, InvalidValueCase, SuccessConfig } from "./types";
+import { CrossFieldValidationCase, FieldConfig, FieldType, FormConfig, InvalidValueCase, SuccessConfig } from "./types";
 
 const VALID_FIELD_TYPES: readonly FieldType[] = [
   "text",
@@ -185,7 +185,46 @@ export function validateFormConfig(data: unknown, sourceLabel: string): FormConf
 
   const success = validateSuccess(data.success, context);
 
-  return { name, url, submitSelector, fields, success };
+  const fieldNames = new Set(fields.map((f) => f.name));
+  const crossFieldValidation =
+    data.crossFieldValidation !== undefined
+      ? validateCrossFieldValidation(data.crossFieldValidation, fieldNames, context)
+      : undefined;
+
+  return { name, url, submitSelector, fields, success, crossFieldValidation };
+}
+
+function validateCrossFieldValidation(
+  raw: unknown,
+  fieldNames: Set<string>,
+  context: string
+): CrossFieldValidationCase[] {
+  if (!Array.isArray(raw)) {
+    throw new ConfigError(`${context}: "crossFieldValidation" must be an array`);
+  }
+  return raw.map((entry, i) => {
+    const caseContext = `${context}.crossFieldValidation[${i}]`;
+    if (!isPlainObject(entry)) {
+      throw new ConfigError(`${caseContext}: expected an object`);
+    }
+    const name = requireString(entry, "name", caseContext);
+    const namedContext = `${caseContext} ("${name}")`;
+    if (!isPlainObject(entry.overrides) || Object.keys(entry.overrides).length === 0) {
+      throw new ConfigError(`${namedContext}: "overrides" must be a non-empty object of field name -> value`);
+    }
+    const overrides: Record<string, string> = {};
+    for (const [fieldName, value] of Object.entries(entry.overrides)) {
+      if (!fieldNames.has(fieldName)) {
+        throw new ConfigError(`${namedContext}: "overrides" references unknown field "${fieldName}"`);
+      }
+      if (typeof value !== "string") {
+        throw new ConfigError(`${namedContext}: "overrides.${fieldName}" must be a string`);
+      }
+      overrides[fieldName] = value;
+    }
+    const expectedError = requireString(entry, "expectedError", namedContext);
+    return { name, overrides, expectedError };
+  });
 }
 
 /** Loads and validates a single form config file. */

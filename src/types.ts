@@ -58,6 +58,14 @@ export interface SuccessConfig {
   response?: SuccessResponseCriterion;
 }
 
+export interface CrossFieldValidationCase {
+  /** Descriptive name for this scenario, e.g. "password-confirm-mismatch". */
+  name: string;
+  /** Field name -> value overrides for just this case; every other field uses its validValue. */
+  overrides: Record<string, string>;
+  expectedError: string;
+}
+
 export interface FormConfig {
   /** Identifier for this form, used in reports and CLI output. */
   name: string;
@@ -67,4 +75,6 @@ export interface FormConfig {
   submitSelector: string;
   fields: FieldConfig[];
   success: SuccessConfig;
+  /** Optional scenarios spanning multiple fields (e.g. password/confirm mismatch, end-date before start-date). */
+  crossFieldValidation?: CrossFieldValidationCase[];
 }

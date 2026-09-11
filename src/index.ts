@@ -10,5 +10,6 @@ export { openFormPage, closeSession, BrowserSession, OpenFormPageOptions, Naviga
 export { fillField, FieldFiller, FieldNotFoundError, FieldFillError } from "./fields";
 export { runRequiredFieldValidation, runFieldFormatValidation, ValidationCaseResult, ValidationCaseStatus } from "./runner";
 export { runHappyPathSubmission, SubmissionResult, SuccessCheckResult, SuccessCriterionKind } from "./runner";
+export { runCrossFieldValidation, runDoubleSubmitCheck, runBackButtonCheck } from "./runner";
 
 export const VERSION = "0.1.0";

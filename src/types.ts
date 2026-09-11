@@ -123,4 +123,6 @@ export interface MultiStepFormConfig {
   success: SuccessConfig;
   /** Optional selectors to snapshot (matched/visible/text) on the final submission result. */
   snapshotSelectors?: string[];
+  /** Optional conditions waited on, in order, after navigation (and after opening the dialog, if configured) before the first step's fields are touched. */
+  waits?: WaitCondition[];
 }

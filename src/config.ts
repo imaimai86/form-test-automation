@@ -396,7 +396,9 @@ export function validateMultiStepFormConfig(data: unknown, sourceLabel: string):
   const snapshotSelectors =
     data.snapshotSelectors !== undefined ? validateSnapshotSelectors(data.snapshotSelectors, context) : undefined;
 
-  return { name, url, openTrigger, dialogSelector, steps, success, snapshotSelectors };
+  const waits = data.waits !== undefined ? validateWaitConditions(data.waits, context) : undefined;
+
+  return { name, url, openTrigger, dialogSelector, steps, success, snapshotSelectors, waits };
 }
 
 /**

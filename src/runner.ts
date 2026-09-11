@@ -1,5 +1,5 @@
 import type { Page, Response } from "playwright";
-import { FieldConfig, FormConfig, SuccessMessageCriterion, SuccessResponseCriterion } from "./types";
+import { FieldConfig, FormConfig, MultiStepFormConfig, SuccessConfig, SuccessMessageCriterion, SuccessResponseCriterion } from "./types";
 import { closeSession, openFormPage, OpenFormPageOptions } from "./browser";
 import { fillField } from "./fields";
 import { FormTestAutomationError } from "./errors";
@@ -365,7 +365,7 @@ export async function runBackButtonCheck(
   }
 }
 
-export type SuccessCriterionKind = "message" | "redirectUrl" | "response";
+export type SuccessCriterionKind = "message" | "redirectUrl" | "response" | "custom";
 
 export interface SuccessCheckResult {
   criterion: SuccessCriterionKind;
@@ -373,11 +373,23 @@ export interface SuccessCheckResult {
   message: string;
 }
 
+/** One selector's captured state at submission time: did it match anything, was it visible, and its text. */
+export interface SnapshotEntry {
+  matched: boolean;
+  visible: boolean;
+  text: string;
+}
+
 export interface SubmissionResult {
   status: "passed" | "failed";
   checks: SuccessCheckResult[];
   message: string;
+  /** Present only when snapshotSelectors was configured. Captured regardless of overall pass/fail. */
+  snapshot?: Record<string, SnapshotEntry>;
 }
+
+/** A caller-supplied hook for success/failure logic beyond declarative success criteria (FR16). */
+export type SubmissionValidator = (page: Page) => Promise<{ passed: boolean; message: string }>;
 
 async function checkMessageCriterion(
   page: Page,
@@ -443,17 +455,95 @@ async function checkResponseCriterion(
   }
 }
 
+async function captureSnapshot(page: Page, selectors: string[] | undefined): Promise<Record<string, SnapshotEntry> | undefined> {
+  if (!selectors || selectors.length === 0) return undefined;
+  const snapshot: Record<string, SnapshotEntry> = {};
+  for (const selector of selectors) {
+    const locator = page.locator(selector);
+    const matched = (await locator.count()) > 0;
+    const visible = matched ? await locator.first().isVisible().catch(() => false) : false;
+    const text = matched ? ((await locator.first().textContent().catch(() => "")) ?? "").trim() : "";
+    snapshot[selector] = { matched, visible, text };
+  }
+  return snapshot;
+}
+
+/**
+ * Given a page ready to submit, arms any configured network-response
+ * listener, performs `submitAction` (the actual click — a plain submit
+ * button for a single-step form, or the last step's "next" control for a
+ * wizard), then checks every configured success criterion plus, if
+ * provided, a custom validate hook — all ANDed together — and captures a
+ * DOM snapshot if `snapshotSelectors` was configured. Shared by
+ * runHappyPathSubmission and runMultiStepHappyPath so success-checking
+ * logic exists in exactly one place.
+ */
+async function submitAndCheckSuccess(
+  page: Page,
+  success: SuccessConfig,
+  submitAction: () => Promise<void>,
+  timeoutMs: number,
+  extra: { snapshotSelectors?: string[]; validate?: SubmissionValidator }
+): Promise<SubmissionResult> {
+  let responsePromise: Promise<Response> | undefined;
+  if (success.response) {
+    const { urlPattern, status } = success.response;
+    responsePromise = page.waitForResponse(
+      (response) =>
+        (urlPattern === undefined || response.url().includes(urlPattern)) &&
+        (status === undefined || response.status() === status),
+      { timeout: timeoutMs }
+    );
+    // Attach a no-op handler now so Node never reports this as an
+    // unhandled rejection if it rejects before checkResponseCriterion gets
+    // around to awaiting it below.
+    responsePromise.catch(() => {});
+  }
+
+  await submitAction();
+
+  const checks: SuccessCheckResult[] = [];
+  if (success.message) {
+    checks.push(await checkMessageCriterion(page, success.message, timeoutMs));
+  }
+  if (success.redirectUrl) {
+    checks.push(await checkRedirectCriterion(page, success.redirectUrl, timeoutMs));
+  }
+  if (success.response) {
+    checks.push(await checkResponseCriterion(responsePromise, timeoutMs));
+  }
+  if (extra.validate) {
+    const result = await extra.validate(page);
+    checks.push({ criterion: "custom", passed: result.passed, message: result.message });
+  }
+
+  const snapshot = await captureSnapshot(page, extra.snapshotSelectors);
+
+  const failedCount = checks.filter((c) => !c.passed).length;
+  const allPassed = checks.length > 0 && failedCount === 0;
+  return {
+    status: allPassed ? "passed" : "failed",
+    checks,
+    message: allPassed
+      ? "All configured success criteria were met"
+      : `${failedCount} of ${checks.length} success criteria failed`,
+    snapshot,
+  };
+}
+
 /**
  * Fills every field with its valid value, submits, and asserts every
  * success criterion configured on `config.success` (message, redirectUrl,
- * response — any combination, all of the ones present must pass). Returns
- * a single SubmissionResult with a per-criterion breakdown; never throws
- * for an expected outcome (a criterion not being met is a "failed" check,
- * not an exception).
+ * response — any combination, all of the ones present must pass), plus an
+ * optional caller-supplied `validate` hook (FR16) and an optional DOM
+ * snapshot of `config.snapshotSelectors` (FR15). Returns a single
+ * SubmissionResult with a per-criterion breakdown; never throws for an
+ * expected outcome (a criterion not being met is a "failed" check, not an
+ * exception).
  */
 export async function runHappyPathSubmission(
   config: FormConfig,
-  options: OpenFormPageOptions & { timeoutMs?: number } = {}
+  options: OpenFormPageOptions & { timeoutMs?: number; validate?: SubmissionValidator } = {}
 ): Promise<SubmissionResult> {
   const timeoutMs = options.timeoutMs ?? 10_000;
   const session = await openFormPage(config.url, options);
@@ -462,49 +552,100 @@ export async function runHappyPathSubmission(
     await performWaits(session.page, config.waits, timeoutMs);
     await fillFormFields(session.page, config.fields, {}, new Set(), timeoutMs);
 
-    let responsePromise: Promise<Response> | undefined;
-    if (config.success.response) {
-      const { urlPattern, status } = config.success.response;
-      responsePromise = session.page.waitForResponse(
-        (response) =>
-          (urlPattern === undefined || response.url().includes(urlPattern)) &&
-          (status === undefined || response.status() === status),
-        { timeout: timeoutMs }
-      );
-      // Attach a no-op handler now so Node never reports this as an
-      // unhandled rejection if it rejects before checkResponseCriterion
-      // gets around to awaiting it below.
-      responsePromise.catch(() => {});
-    }
-
-    await session.page.locator(config.submitSelector).click();
-
-    const checks: SuccessCheckResult[] = [];
-    if (config.success.message) {
-      checks.push(await checkMessageCriterion(session.page, config.success.message, timeoutMs));
-    }
-    if (config.success.redirectUrl) {
-      checks.push(await checkRedirectCriterion(session.page, config.success.redirectUrl, timeoutMs));
-    }
-    if (config.success.response) {
-      checks.push(await checkResponseCriterion(responsePromise, timeoutMs));
-    }
-
-    const failedCount = checks.filter((c) => !c.passed).length;
-    const allPassed = checks.length > 0 && failedCount === 0;
-    return {
-      status: allPassed ? "passed" : "failed",
-      checks,
-      message: allPassed
-        ? "All configured success criteria were met"
-        : `${failedCount} of ${checks.length} success criteria failed`,
-    };
+    return await submitAndCheckSuccess(
+      session.page,
+      config.success,
+      () => session.page.locator(config.submitSelector).click(),
+      timeoutMs,
+      { snapshotSelectors: config.snapshotSelectors, validate: options.validate }
+    );
   } catch (err) {
     const reason = err instanceof FormTestAutomationError || err instanceof Error ? err.message : String(err);
     return {
       status: "failed",
       checks: [],
       message: `Could not complete the happy-path submission: ${reason}`,
+    };
+  } finally {
+    await closeSession(session);
+  }
+}
+
+/**
+ * Runs a full multi-step wizard: optionally clicks `openTrigger` to open a
+ * dialog (waiting for `dialogSelector` if configured), then for each step
+ * fills its fields and clicks its `nextSelector` — waiting for the next
+ * step's `stepMarkerSelector` to become visible before continuing, exactly
+ * the same way whether that next step was already in the DOM (hidden) or
+ * gets inserted dynamically (see docs/requirements.md, "Multi-Step Forms",
+ * FR12). On the last step, reuses the same success-criteria/snapshot/
+ * validate-hook logic as runHappyPathSubmission via submitAndCheckSuccess.
+ * Every expected failure mode (a missing dialog trigger, a step that never
+ * advances, a navigation error) produces a "failed" SubmissionResult with a
+ * specific message, never an uncaught exception.
+ */
+export async function runMultiStepHappyPath(
+  config: MultiStepFormConfig,
+  options: OpenFormPageOptions & { timeoutMs?: number; validate?: SubmissionValidator } = {}
+): Promise<SubmissionResult> {
+  const timeoutMs = options.timeoutMs ?? 10_000;
+  const session = await openFormPage(config.url, options);
+
+  try {
+    await performWaits(session.page, config.waits, timeoutMs);
+
+    if (config.openTrigger) {
+      try {
+        await session.page.locator(config.openTrigger).click({ timeout: timeoutMs });
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        throw new Error(`Could not open the dialog: clicking openTrigger "${config.openTrigger}" failed: ${reason}`);
+      }
+      if (config.dialogSelector) {
+        try {
+          await session.page.locator(config.dialogSelector).waitFor({ state: "visible", timeout: timeoutMs });
+        } catch {
+          throw new Error(
+            `Dialog did not open: "${config.dialogSelector}" was not visible within ${timeoutMs}ms after clicking openTrigger`
+          );
+        }
+      }
+    }
+
+    for (let i = 0; i < config.steps.length; i++) {
+      const step = config.steps[i];
+      await performWaits(session.page, step.waits, timeoutMs);
+      await fillFormFields(session.page, step.fields, {}, new Set(), timeoutMs);
+
+      const isLastStep = i === config.steps.length - 1;
+      if (!isLastStep) {
+        await session.page.locator(step.nextSelector).click();
+        const nextStep = config.steps[i + 1];
+        try {
+          await session.page.locator(nextStep.stepMarkerSelector).waitFor({ state: "visible", timeout: timeoutMs });
+        } catch {
+          throw new Error(
+            `Step "${step.name}": clicked "${step.nextSelector}" but the next step's marker "${nextStep.stepMarkerSelector}" never became visible within ${timeoutMs}ms`
+          );
+        }
+      } else {
+        return await submitAndCheckSuccess(
+          session.page,
+          config.success,
+          () => session.page.locator(step.nextSelector).click(),
+          timeoutMs,
+          { snapshotSelectors: config.snapshotSelectors, validate: options.validate }
+        );
+      }
+    }
+
+    return { status: "failed", checks: [], message: "Multi-step config has no steps to run" };
+  } catch (err) {
+    const reason = err instanceof FormTestAutomationError || err instanceof Error ? err.message : String(err);
+    return {
+      status: "failed",
+      checks: [],
+      message: `Could not complete the multi-step happy-path submission: ${reason}`,
     };
   } finally {
     await closeSession(session);

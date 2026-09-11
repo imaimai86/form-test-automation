@@ -572,6 +572,58 @@ export async function runHappyPathSubmission(
 }
 
 /**
+ * Opens the dialog (if `openTrigger`/`dialogSelector` are configured) and
+ * advances through steps `[0, uptoStepIndex)` with valid data, leaving the
+ * wizard positioned on step `uptoStepIndex`. Shared by
+ * runMultiStepHappyPath (advances through every step but the last) and
+ * runMultiStepStepValidation (advances to whichever step is under test).
+ * Every expected failure (missing/wrong openTrigger, a step that never
+ * advances) throws a plain Error with a specific message — callers already
+ * wrap this in their own try/catch alongside every other expected failure.
+ */
+async function advanceThroughSteps(
+  page: Page,
+  config: MultiStepFormConfig,
+  uptoStepIndex: number,
+  timeoutMs: number
+): Promise<void> {
+  await performWaits(page, config.waits, timeoutMs);
+
+  if (config.openTrigger) {
+    try {
+      await page.locator(config.openTrigger).click({ timeout: timeoutMs });
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      throw new Error(`Could not open the dialog: clicking openTrigger "${config.openTrigger}" failed: ${reason}`);
+    }
+    if (config.dialogSelector) {
+      try {
+        await page.locator(config.dialogSelector).waitFor({ state: "visible", timeout: timeoutMs });
+      } catch {
+        throw new Error(
+          `Dialog did not open: "${config.dialogSelector}" was not visible within ${timeoutMs}ms after clicking openTrigger`
+        );
+      }
+    }
+  }
+
+  for (let i = 0; i < uptoStepIndex; i++) {
+    const step = config.steps[i];
+    await performWaits(page, step.waits, timeoutMs);
+    await fillFormFields(page, step.fields, {}, new Set(), timeoutMs);
+    await page.locator(step.nextSelector).click();
+    const nextStep = config.steps[i + 1];
+    try {
+      await page.locator(nextStep.stepMarkerSelector).waitFor({ state: "visible", timeout: timeoutMs });
+    } catch {
+      throw new Error(
+        `Step "${step.name}": clicked "${step.nextSelector}" but the next step's marker "${nextStep.stepMarkerSelector}" never became visible within ${timeoutMs}ms`
+      );
+    }
+  }
+}
+
+/**
  * Runs a full multi-step wizard: optionally clicks `openTrigger` to open a
  * dialog (waiting for `dialogSelector` if configured), then for each step
  * fills its fields and clicks its `nextSelector` — waiting for the next
@@ -592,54 +644,23 @@ export async function runMultiStepHappyPath(
   const session = await openFormPage(config.url, options);
 
   try {
-    await performWaits(session.page, config.waits, timeoutMs);
-
-    if (config.openTrigger) {
-      try {
-        await session.page.locator(config.openTrigger).click({ timeout: timeoutMs });
-      } catch (err) {
-        const reason = err instanceof Error ? err.message : String(err);
-        throw new Error(`Could not open the dialog: clicking openTrigger "${config.openTrigger}" failed: ${reason}`);
-      }
-      if (config.dialogSelector) {
-        try {
-          await session.page.locator(config.dialogSelector).waitFor({ state: "visible", timeout: timeoutMs });
-        } catch {
-          throw new Error(
-            `Dialog did not open: "${config.dialogSelector}" was not visible within ${timeoutMs}ms after clicking openTrigger`
-          );
-        }
-      }
+    if (config.steps.length === 0) {
+      return { status: "failed", checks: [], message: "Multi-step config has no steps to run" };
     }
 
-    for (let i = 0; i < config.steps.length; i++) {
-      const step = config.steps[i];
-      await performWaits(session.page, step.waits, timeoutMs);
-      await fillFormFields(session.page, step.fields, {}, new Set(), timeoutMs);
+    await advanceThroughSteps(session.page, config, config.steps.length - 1, timeoutMs);
 
-      const isLastStep = i === config.steps.length - 1;
-      if (!isLastStep) {
-        await session.page.locator(step.nextSelector).click();
-        const nextStep = config.steps[i + 1];
-        try {
-          await session.page.locator(nextStep.stepMarkerSelector).waitFor({ state: "visible", timeout: timeoutMs });
-        } catch {
-          throw new Error(
-            `Step "${step.name}": clicked "${step.nextSelector}" but the next step's marker "${nextStep.stepMarkerSelector}" never became visible within ${timeoutMs}ms`
-          );
-        }
-      } else {
-        return await submitAndCheckSuccess(
-          session.page,
-          config.success,
-          () => session.page.locator(step.nextSelector).click(),
-          timeoutMs,
-          { snapshotSelectors: config.snapshotSelectors, validate: options.validate }
-        );
-      }
-    }
+    const lastStep = config.steps[config.steps.length - 1];
+    await performWaits(session.page, lastStep.waits, timeoutMs);
+    await fillFormFields(session.page, lastStep.fields, {}, new Set(), timeoutMs);
 
-    return { status: "failed", checks: [], message: "Multi-step config has no steps to run" };
+    return await submitAndCheckSuccess(
+      session.page,
+      config.success,
+      () => session.page.locator(lastStep.nextSelector).click(),
+      timeoutMs,
+      { snapshotSelectors: config.snapshotSelectors, validate: options.validate }
+    );
   } catch (err) {
     const reason = err instanceof FormTestAutomationError || err instanceof Error ? err.message : String(err);
     return {
@@ -650,4 +671,103 @@ export async function runMultiStepHappyPath(
   } finally {
     await closeSession(session);
   }
+}
+
+/**
+ * For each step, for each field's `invalidValues` entries, fills that one
+ * field with the invalid value (every other field in the same step filled
+ * with its valid value), clicks the step's `nextSelector`, and asserts BOTH
+ * that the field's configured error appears AND that the wizard did not
+ * advance (the step's own marker is still visible, and — if not the last
+ * step — the next step's marker never appeared). Reaching step N first
+ * requires completing steps 0..N-1 with valid data, via the same
+ * advanceThroughSteps helper runMultiStepHappyPath uses.
+ *
+ * A step field with no `invalidValues` entries contributes a single
+ * "skipped" result, consistent with the equivalent single-step runners.
+ * Result `fieldName` is qualified as "stepName.fieldName" since a field
+ * name is only unique within its own step.
+ */
+export async function runMultiStepStepValidation(
+  config: MultiStepFormConfig,
+  options: OpenFormPageOptions & { timeoutMs?: number } = {}
+): Promise<ValidationCaseResult[]> {
+  const timeoutMs = options.timeoutMs ?? 10_000;
+  const results: ValidationCaseResult[] = [];
+
+  for (let stepIndex = 0; stepIndex < config.steps.length; stepIndex++) {
+    const step = config.steps[stepIndex];
+    const isLastStep = stepIndex === config.steps.length - 1;
+
+    for (const field of step.fields) {
+      const cases = field.invalidValues ?? [];
+      const qualifiedName = `${step.name}.${field.name}`;
+
+      if (cases.length === 0) {
+        results.push({
+          fieldName: qualifiedName,
+          value: "",
+          expectedError: "",
+          status: "skipped",
+          message: `Field "${field.name}" in step "${step.name}" has no invalidValues entries to test`,
+        });
+        continue;
+      }
+
+      for (const invalidCase of cases) {
+        const session = await openFormPage(config.url, options);
+        try {
+          await advanceThroughSteps(session.page, config, stepIndex, timeoutMs);
+          await performWaits(session.page, step.waits, timeoutMs);
+          await fillFormFields(session.page, step.fields, { [field.name]: invalidCase.value }, new Set(), timeoutMs);
+          await session.page.locator(step.nextSelector).click();
+
+          const errorAppeared = await session.page
+            .locator(invalidCase.expectedError)
+            .waitFor({ state: "visible", timeout: timeoutMs })
+            .then(() => true)
+            .catch(() => false);
+
+          let stayedOnStep = await session.page
+            .locator(step.stepMarkerSelector)
+            .isVisible()
+            .catch(() => false);
+          if (stayedOnStep && !isLastStep) {
+            const nextStep = config.steps[stepIndex + 1];
+            const nextVisible = await session.page
+              .locator(nextStep.stepMarkerSelector)
+              .isVisible()
+              .catch(() => false);
+            stayedOnStep = !nextVisible;
+          }
+
+          const passed = errorAppeared && stayedOnStep;
+          results.push({
+            fieldName: qualifiedName,
+            value: invalidCase.value,
+            expectedError: invalidCase.expectedError,
+            status: passed ? "passed" : "failed",
+            message: passed
+              ? `Validation error appeared at "${invalidCase.expectedError}" and the wizard correctly stayed on step "${step.name}"`
+              : !errorAppeared
+                ? `Expected validation error at "${invalidCase.expectedError}" did not appear within ${timeoutMs}ms`
+                : `Validation error appeared, but the wizard advanced past step "${step.name}" anyway`,
+          });
+        } catch (err) {
+          const reason = err instanceof FormTestAutomationError || err instanceof Error ? err.message : String(err);
+          results.push({
+            fieldName: qualifiedName,
+            value: invalidCase.value,
+            expectedError: invalidCase.expectedError,
+            status: "failed",
+            message: `Could not complete this test case: ${reason}`,
+          });
+        } finally {
+          await closeSession(session);
+        }
+      }
+    }
+  }
+
+  return results;
 }

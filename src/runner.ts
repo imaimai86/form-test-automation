@@ -3,6 +3,7 @@ import { FieldConfig, FormConfig, SuccessMessageCriterion, SuccessResponseCriter
 import { closeSession, openFormPage, OpenFormPageOptions } from "./browser";
 import { fillField } from "./fields";
 import { FormTestAutomationError } from "./errors";
+import { performWaits } from "./waits";
 
 export type ValidationCaseStatus = "passed" | "failed" | "skipped";
 
@@ -16,19 +17,22 @@ export interface ValidationCaseResult {
 }
 
 /**
- * Fills every field in the config with its valid value, except:
+ * Fills every field in `fields` with its valid value, except:
  * - fields named in `skip` are left untouched (their natural empty/unset state)
  * - fields present in `overrides` are filled with the override value instead of their valid value
  * A field name should not appear in both `skip` and `overrides`.
+ *
+ * Takes a bare FieldConfig[] (not a whole FormConfig) so it's reusable for a
+ * single step of a multi-step form, not just a full single-step form.
  */
 async function fillFormFields(
   page: Page,
-  config: FormConfig,
+  fields: FieldConfig[],
   overrides: Record<string, string>,
   skip: Set<string>,
   timeoutMs: number | undefined
 ): Promise<void> {
-  for (const field of config.fields) {
+  for (const field of fields) {
     if (skip.has(field.name)) continue;
     const value = field.name in overrides ? overrides[field.name] : field.validValue;
     await fillField(page, field, value, timeoutMs);
@@ -96,7 +100,8 @@ export async function runRequiredFieldValidation(
 
     const session = await openFormPage(config.url, options);
     try {
-      await fillFormFields(session.page, config, {}, new Set([field.name]), timeoutMs);
+      await performWaits(session.page, config.waits, timeoutMs);
+      await fillFormFields(session.page, config.fields, {}, new Set([field.name]), timeoutMs);
       await session.page.locator(config.submitSelector).click();
       results.push(await assertErrorAppears(session.page, field, "", emptyCase.expectedError, timeoutMs));
     } catch (err) {
@@ -149,7 +154,8 @@ export async function runFieldFormatValidation(
     for (const invalidCase of formatCases) {
       const session = await openFormPage(config.url, options);
       try {
-        await fillFormFields(session.page, config, { [field.name]: invalidCase.value }, new Set(), timeoutMs);
+        await performWaits(session.page, config.waits, timeoutMs);
+        await fillFormFields(session.page, config.fields, { [field.name]: invalidCase.value }, new Set(), timeoutMs);
         await session.page.locator(config.submitSelector).click();
         results.push(await assertErrorAppears(session.page, field, invalidCase.value, invalidCase.expectedError, timeoutMs));
       } catch (err) {
@@ -201,7 +207,8 @@ export async function runCrossFieldValidation(
   for (const crossCase of cases) {
     const session = await openFormPage(config.url, options);
     try {
-      await fillFormFields(session.page, config, crossCase.overrides, new Set(), timeoutMs);
+      await performWaits(session.page, config.waits, timeoutMs);
+      await fillFormFields(session.page, config.fields, crossCase.overrides, new Set(), timeoutMs);
       await session.page.locator(config.submitSelector).click();
       const overrideSummary = JSON.stringify(crossCase.overrides);
       try {
@@ -253,7 +260,8 @@ export async function runDoubleSubmitCheck(
   const timeoutMs = options.timeoutMs ?? 10_000;
   const session = await openFormPage(config.url, options);
   try {
-    await fillFormFields(session.page, config, {}, new Set(), timeoutMs);
+    await performWaits(session.page, config.waits, timeoutMs);
+    await fillFormFields(session.page, config.fields, {}, new Set(), timeoutMs);
     const submitLocator = session.page.locator(config.submitSelector);
     await submitLocator.click();
     // Best-effort second click. If the page already navigated away, the
@@ -316,7 +324,8 @@ export async function runBackButtonCheck(
   const timeoutMs = options.timeoutMs ?? 10_000;
   const session = await openFormPage(config.url, options);
   try {
-    await fillFormFields(session.page, config, {}, new Set(), timeoutMs);
+    await performWaits(session.page, config.waits, timeoutMs);
+    await fillFormFields(session.page, config.fields, {}, new Set(), timeoutMs);
     await session.page.locator(config.submitSelector).click();
 
     if (config.success.redirectUrl) {
@@ -450,7 +459,8 @@ export async function runHappyPathSubmission(
   const session = await openFormPage(config.url, options);
 
   try {
-    await fillFormFields(session.page, config, {}, new Set(), timeoutMs);
+    await performWaits(session.page, config.waits, timeoutMs);
+    await fillFormFields(session.page, config.fields, {}, new Set(), timeoutMs);
 
     let responsePromise: Promise<Response> | undefined;
     if (config.success.response) {

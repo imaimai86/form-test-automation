@@ -1,7 +1,19 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { ConfigError } from "./errors";
-import { CrossFieldValidationCase, FieldConfig, FieldType, FormConfig, InvalidValueCase, SuccessConfig } from "./types";
+import {
+  CrossFieldValidationCase,
+  FieldConfig,
+  FieldType,
+  FormConfig,
+  FormStep,
+  InvalidValueCase,
+  MultiStepFormConfig,
+  SuccessConfig,
+  WaitCondition,
+} from "./types";
+
+const VALID_WAIT_SELECTOR_STATES = ["visible", "attached", "hidden", "detached"] as const;
 
 const VALID_FIELD_TYPES: readonly FieldType[] = [
   "text",
@@ -191,7 +203,62 @@ export function validateFormConfig(data: unknown, sourceLabel: string): FormConf
       ? validateCrossFieldValidation(data.crossFieldValidation, fieldNames, context)
       : undefined;
 
-  return { name, url, submitSelector, fields, success, crossFieldValidation };
+  const snapshotSelectors =
+    data.snapshotSelectors !== undefined ? validateSnapshotSelectors(data.snapshotSelectors, context) : undefined;
+
+  const waits = data.waits !== undefined ? validateWaitConditions(data.waits, context) : undefined;
+
+  return { name, url, submitSelector, fields, success, crossFieldValidation, snapshotSelectors, waits };
+}
+
+function validateWaitCondition(raw: unknown, index: number, context: string): WaitCondition {
+  const waitContext = `${context}.waits[${index}]`;
+  if (!isPlainObject(raw)) {
+    throw new ConfigError(`${waitContext}: expected an object`);
+  }
+  const type = raw.type;
+  if (type === "selector") {
+    const selector = requireString(raw, "selector", waitContext);
+    if (raw.state !== undefined && !VALID_WAIT_SELECTOR_STATES.includes(raw.state as (typeof VALID_WAIT_SELECTOR_STATES)[number])) {
+      throw new ConfigError(`${waitContext}: "state" must be one of ${VALID_WAIT_SELECTOR_STATES.join(", ")}`);
+    }
+    const state = raw.state as "visible" | "attached" | "hidden" | "detached" | undefined;
+    return { type: "selector", selector, state };
+  }
+  if (type === "value") {
+    const selector = requireString(raw, "selector", waitContext);
+    if (raw.equals !== undefined && typeof raw.equals !== "string") {
+      throw new ConfigError(`${waitContext}: "equals" must be a string`);
+    }
+    if (raw.notEmpty !== undefined && typeof raw.notEmpty !== "boolean") {
+      throw new ConfigError(`${waitContext}: "notEmpty" must be a boolean`);
+    }
+    return { type: "value", selector, equals: raw.equals as string | undefined, notEmpty: raw.notEmpty as boolean | undefined };
+  }
+  if (type === "timeout") {
+    const ms = requireNumber(raw, "ms", waitContext);
+    return { type: "timeout", ms };
+  }
+  throw new ConfigError(`${waitContext}: "type" must be one of "selector", "value", "timeout" (got "${type}")`);
+}
+
+function validateWaitConditions(raw: unknown, context: string): WaitCondition[] {
+  if (!Array.isArray(raw)) {
+    throw new ConfigError(`${context}: "waits" must be an array`);
+  }
+  return raw.map((w, i) => validateWaitCondition(w, i, context));
+}
+
+function validateSnapshotSelectors(raw: unknown, context: string): string[] {
+  if (!Array.isArray(raw)) {
+    throw new ConfigError(`${context}: "snapshotSelectors" must be an array of strings`);
+  }
+  return raw.map((s, i) => {
+    if (typeof s !== "string" || s.trim() === "") {
+      throw new ConfigError(`${context}.snapshotSelectors[${i}]: must be a non-empty string`);
+    }
+    return s;
+  });
 }
 
 function validateCrossFieldValidation(
@@ -227,8 +294,8 @@ function validateCrossFieldValidation(
   });
 }
 
-/** Loads and validates a single form config file. */
-export function loadFormConfig(filePath: string): FormConfig {
+/** Reads and JSON-parses a config file, throwing a ConfigError for a missing file or invalid JSON. */
+function readJsonConfigFile(filePath: string): unknown {
   let raw: string;
   try {
     raw = fs.readFileSync(filePath, "utf-8");
@@ -240,14 +307,96 @@ export function loadFormConfig(filePath: string): FormConfig {
     throw new ConfigError(`Could not read config file "${filePath}": ${(err as Error).message}`);
   }
 
-  let data: unknown;
   try {
-    data = JSON.parse(raw);
+    return JSON.parse(raw);
   } catch (err) {
     throw new ConfigError(`Config file "${filePath}" is not valid JSON: ${(err as Error).message}`);
   }
+}
 
-  return validateFormConfig(data, filePath);
+/**
+ * Best-effort detection of which config shape a parsed JSON value is, based
+ * on its top-level keys — a multi-step config has "steps", a single-step
+ * config has "fields". Used by the CLI to route to the right loader without
+ * requiring a separate file naming convention.
+ */
+export function isMultiStepConfigData(data: unknown): boolean {
+  return isPlainObject(data) && Array.isArray((data as Record<string, unknown>).steps);
+}
+
+/** Loads and validates a single-step form config file. */
+export function loadFormConfig(filePath: string): FormConfig {
+  return validateFormConfig(readJsonConfigFile(filePath), filePath);
+}
+
+/** Loads and validates a multi-step (wizard/dialog) form config file. */
+export function loadMultiStepFormConfig(filePath: string): MultiStepFormConfig {
+  return validateMultiStepFormConfig(readJsonConfigFile(filePath), filePath);
+}
+
+function validateStep(raw: unknown, index: number, context: string): FormStep {
+  const stepContext = `${context}.steps[${index}]`;
+  if (!isPlainObject(raw)) {
+    throw new ConfigError(`${stepContext}: expected an object`);
+  }
+
+  const name = requireString(raw, "name", stepContext);
+  const namedContext = `${stepContext} ("${name}")`;
+  const stepMarkerSelector = requireString(raw, "stepMarkerSelector", namedContext);
+  const nextSelector = requireString(raw, "nextSelector", namedContext);
+
+  const rawFields = raw.fields;
+  if (!Array.isArray(rawFields) || rawFields.length === 0) {
+    throw new ConfigError(`${namedContext}: "fields" must be a non-empty array`);
+  }
+  const fields = rawFields.map((f, i) => validateField(f, i, namedContext));
+
+  const fieldNames = new Set(fields.map((f) => f.name));
+  const crossFieldValidation =
+    raw.crossFieldValidation !== undefined
+      ? validateCrossFieldValidation(raw.crossFieldValidation, fieldNames, namedContext)
+      : undefined;
+
+  const waits = raw.waits !== undefined ? validateWaitConditions(raw.waits, namedContext) : undefined;
+
+  return { name, stepMarkerSelector, fields, nextSelector, crossFieldValidation, waits };
+}
+
+/**
+ * Validates a parsed JSON value against the multi-step form config schema.
+ * Mirrors validateFormConfig's rigor — a specific error naming which step
+ * and which key is wrong, never a generic failure.
+ */
+export function validateMultiStepFormConfig(data: unknown, sourceLabel: string): MultiStepFormConfig {
+  if (!isPlainObject(data)) {
+    throw new ConfigError(`${sourceLabel}: expected a JSON object at the top level`);
+  }
+
+  const name = requireString(data, "name", sourceLabel);
+  const context = `${sourceLabel} ("${name}")`;
+
+  const url = requireString(data, "url", context);
+  try {
+    new URL(url);
+  } catch {
+    throw new ConfigError(`${context}: "url" is not a valid URL: "${url}"`);
+  }
+
+  const openTrigger = data.openTrigger !== undefined ? requireString(data, "openTrigger", context) : undefined;
+  const dialogSelector = data.dialogSelector !== undefined ? requireString(data, "dialogSelector", context) : undefined;
+
+  const rawSteps = data.steps;
+  if (!Array.isArray(rawSteps) || rawSteps.length === 0) {
+    throw new ConfigError(`${context}: "steps" must be a non-empty array`);
+  }
+  const steps = rawSteps.map((s, i) => validateStep(s, i, context));
+
+  const success = validateSuccess(data.success, context);
+
+  const snapshotSelectors =
+    data.snapshotSelectors !== undefined ? validateSnapshotSelectors(data.snapshotSelectors, context) : undefined;
+
+  return { name, url, openTrigger, dialogSelector, steps, success, snapshotSelectors };
 }
 
 /**

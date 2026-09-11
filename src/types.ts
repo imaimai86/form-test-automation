@@ -7,6 +7,7 @@ export type FieldType =
   | "text"
   | "email"
   | "phone"
+  | "password"
   | "number"
   | "select"
   | "checkbox"

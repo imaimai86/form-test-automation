@@ -1,0 +1,31 @@
+{
+  "name": "the-internet-login",
+  "url": "https://the-internet.herokuapp.com/login",
+  "submitSelector": "button[type='submit']",
+  "fields": [
+    {
+      "name": "username",
+      "selector": "#username",
+      "type": "text",
+      "required": true,
+      "validValue": "tomsmith",
+      "invalidValues": [
+        { "value": "", "expectedError": "#flash" }
+      ]
+    },
+    {
+      "name": "password",
+      "selector": "#password",
+      "type": "password",
+      "required": true,
+      "validValue": "SuperSecretPassword!",
+      "invalidValues": [
+        { "value": "wrong-password", "expectedError": "#flash" }
+      ]
+    }
+  ],
+  "success": {
+    "message": { "selector": "#flash", "text": "You logged into a secure area!" },
+    "redirectUrl": "https://the-internet.herokuapp.com/secure"
+  }
+}

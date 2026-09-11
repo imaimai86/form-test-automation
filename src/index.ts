@@ -4,5 +4,7 @@
  */
 
 export * from "./types";
+export * from "./errors";
+export { loadFormConfig, loadFormConfigs, validateFormConfig } from "./config";
 
 export const VERSION = "0.1.0";

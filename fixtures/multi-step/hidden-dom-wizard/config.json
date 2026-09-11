@@ -1,0 +1,56 @@
+{
+  "name": "hidden-dom-wizard",
+  "url": "http://127.0.0.1:8940/index.html",
+  "openTrigger": "#open-dialog",
+  "dialogSelector": "#dialog",
+  "steps": [
+    {
+      "name": "account",
+      "stepMarkerSelector": "#step-account",
+      "fields": [
+        {
+          "name": "email",
+          "selector": "#email",
+          "type": "email",
+          "required": true,
+          "validValue": "user@example.com",
+          "invalidValues": [{ "value": "", "expectedError": "#email-error" }]
+        }
+      ],
+      "nextSelector": "#account-next"
+    },
+    {
+      "name": "profile",
+      "stepMarkerSelector": "#step-profile",
+      "fields": [
+        {
+          "name": "displayName",
+          "selector": "#displayName",
+          "type": "text",
+          "required": true,
+          "validValue": "Jane Doe",
+          "invalidValues": [{ "value": "", "expectedError": "#name-error" }]
+        }
+      ],
+      "nextSelector": "#profile-next"
+    },
+    {
+      "name": "confirm",
+      "stepMarkerSelector": "#step-confirm",
+      "fields": [
+        {
+          "name": "agree",
+          "selector": "#agree",
+          "type": "checkbox",
+          "required": true,
+          "validValue": "true",
+          "invalidValues": [{ "value": "", "expectedError": "#agree-error" }]
+        }
+      ],
+      "nextSelector": "#confirm-submit"
+    }
+  ],
+  "success": {
+    "message": { "selector": "#signup-success", "text": "Welcome" }
+  }
+}

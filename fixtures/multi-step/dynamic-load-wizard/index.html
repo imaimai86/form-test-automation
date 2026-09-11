@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head><title>Dynamically-Loaded Wizard Fixture</title></head>
+<body>
+  <button id="open-dialog" type="button">Start</button>
+
+  <div id="dialog" style="display:none;">
+    <div id="step-username">
+      <label>Username <input type="text" id="username" /></label>
+      <span id="username-error" style="display:none;color:red;">Username is required</span>
+      <button id="username-next" type="button">Next</button>
+    </div>
+
+    <div id="step2-container"></div>
+  </div>
+
+  <script>
+    document.getElementById('open-dialog').addEventListener('click', function () {
+      document.getElementById('dialog').style.display = 'block';
+    });
+
+    document.getElementById('username-next').addEventListener('click', function () {
+      var username = document.getElementById('username').value.trim();
+      var valid = username.length > 0;
+      document.getElementById('username-error').style.display = valid ? 'none' : 'block';
+      if (!valid) return;
+
+      document.getElementById('step-username').style.display = 'none';
+
+      // Step 2 does not exist in the DOM at all until this fetch resolves —
+      // a genuine network round-trip, not a CSS visibility toggle.
+      fetch('step2-fragment.html')
+        .then(function (res) { return res.text(); })
+        .then(function (html) {
+          document.getElementById('step2-container').innerHTML = html;
+          document.getElementById('confirm-submit').addEventListener('click', function () {
+            var code = document.getElementById('confirmationCode').value.trim();
+            var validCode = code.length === 6;
+            document.getElementById('code-error').style.display = validCode ? 'none' : 'block';
+            if (validCode) {
+              document.getElementById('step-confirm').style.display = 'none';
+              document.getElementById('final-success').style.display = 'block';
+            }
+          });
+        });
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head><title>Hidden-in-DOM Wizard Fixture</title></head>
+<body>
+  <button id="open-dialog" type="button">Sign Up</button>
+
+  <div id="dialog" style="display:none;">
+    <div id="step-account">
+      <label>Email <input type="email" id="email" /></label>
+      <span id="email-error" style="display:none;color:red;">A valid email is required</span>
+      <button id="account-next" type="button">Next</button>
+    </div>
+
+    <div id="step-profile" style="display:none;">
+      <label>Display Name <input type="text" id="displayName" /></label>
+      <span id="name-error" style="display:none;color:red;">Name is required</span>
+      <button id="profile-next" type="button">Next</button>
+    </div>
+
+    <div id="step-confirm" style="display:none;">
+      <label><input type="checkbox" id="agree" /> I agree to the terms</label>
+      <span id="agree-error" style="display:none;color:red;">You must agree to continue</span>
+      <button id="confirm-submit" type="button">Submit</button>
+    </div>
+
+    <div id="signup-success" style="display:none;">Welcome! Your account has been created.</div>
+  </div>
+
+  <script>
+    document.getElementById('open-dialog').addEventListener('click', function () {
+      document.getElementById('dialog').style.display = 'block';
+    });
+
+    document.getElementById('account-next').addEventListener('click', function () {
+      var email = document.getElementById('email').value.trim();
+      var valid = email.length > 0 && email.indexOf('@') > 0;
+      document.getElementById('email-error').style.display = valid ? 'none' : 'block';
+      if (valid) {
+        document.getElementById('step-account').style.display = 'none';
+        document.getElementById('step-profile').style.display = 'block';
+      }
+    });
+
+    document.getElementById('profile-next').addEventListener('click', function () {
+      var name = document.getElementById('displayName').value.trim();
+      var valid = name.length > 0;
+      document.getElementById('name-error').style.display = valid ? 'none' : 'block';
+      if (valid) {
+        document.getElementById('step-profile').style.display = 'none';
+        document.getElementById('step-confirm').style.display = 'block';
+      }
+    });
+
+    document.getElementById('confirm-submit').addEventListener('click', function () {
+      var agreed = document.getElementById('agree').checked;
+      document.getElementById('agree-error').style.display = agreed ? 'none' : 'block';
+      if (agreed) {
+        document.getElementById('step-confirm').style.display = 'none';
+        document.getElementById('signup-success').style.display = 'block';
+      }
+    });
+  </script>
+</body>
+</html>

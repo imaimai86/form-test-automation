@@ -1,0 +1,44 @@
+{
+  "name": "dynamic-load-wizard",
+  "url": "http://127.0.0.1:8941/index.html",
+  "openTrigger": "#open-dialog",
+  "dialogSelector": "#dialog",
+  "steps": [
+    {
+      "name": "username",
+      "stepMarkerSelector": "#step-username",
+      "fields": [
+        {
+          "name": "username",
+          "selector": "#username",
+          "type": "text",
+          "required": true,
+          "validValue": "janedoe",
+          "invalidValues": [{ "value": "", "expectedError": "#username-error" }]
+        }
+      ],
+      "nextSelector": "#username-next"
+    },
+    {
+      "name": "confirm",
+      "stepMarkerSelector": "#step-confirm",
+      "fields": [
+        {
+          "name": "confirmationCode",
+          "selector": "#confirmationCode",
+          "type": "text",
+          "required": true,
+          "validValue": "123456",
+          "invalidValues": [
+            { "value": "", "expectedError": "#code-error" },
+            { "value": "abc", "expectedError": "#code-error" }
+          ]
+        }
+      ],
+      "nextSelector": "#confirm-submit"
+    }
+  ],
+  "success": {
+    "message": { "selector": "#final-success", "text": "Verified" }
+  }
+}

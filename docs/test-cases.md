@@ -201,6 +201,27 @@ real security or data-integrity risk (marked P0).
 
 ---
 
+## 7. Multi-Step Form Test Cases (in a Dialog)
+
+See `docs/requirements.md`, "Multi-Step Forms (in a Dialog)" for the schema
+and the key design decision (one step-transition mechanism covers both
+delivery styles below — these test cases exist to prove that, not because
+the tool has two code paths).
+
+| ID | Description | Preconditions | Steps | Expected Result | Priority | FR |
+|----|---|---|---|---|---|---|
+| MS-01 | Dialog opens via trigger | Config has `openTrigger` | Navigate, click `openTrigger` | `dialogSelector` (if configured) becomes visible | P0 | FR11 |
+| MS-02 | Happy path — steps already in DOM, hidden | Fixture (a): all steps present, hidden via CSS | Fill step 1 valid, click Next; repeat for all steps; submit last step | Each step's marker becomes visible in turn; final `success` criteria met | P0 | FR12, FR14 |
+| MS-03 | Happy path — steps loaded dynamically | Fixture (b): step 2 fetched/inserted after step 1's Next | Fill step 1 valid, click Next; step 2 appears; fill valid; submit | Same outcome as MS-02 via the identical runner code path | P0 | FR12, FR14 |
+| MS-04 | Per-step required-field validation blocks advancement | Step field marked `required` with an empty-value `invalidValues` case | Leave the field empty, click step's `nextSelector` | Configured error appears; current step's marker still visible; next step's marker never appears | P0 | FR13 |
+| MS-05 | Per-step format validation blocks advancement | Step field has a non-empty `invalidValues` case | Fill the invalid value, click step's `nextSelector` | Configured error appears; wizard does not advance | P0 | FR13 |
+| MS-06 | Multi-step happy path with a custom `validate` hook | Library caller passes `validate(page)` | Complete the wizard | Hook's result is ANDed with declarative `success` criteria; both must pass for overall "passed" | P1 | FR16 |
+| MS-07 | Snapshot captured on final submission | Config has `snapshotSelectors` | Complete the wizard (pass or fail) | Result includes, per selector, whether it matched/was visible/its text — regardless of overall pass/fail | P1 | FR15 |
+| MS-08 | Dialog never opens (trigger selector wrong/missing) | Config's `openTrigger` targets a nonexistent element | Attempt to run | Clear, specific error (not a stack trace); no attempt to fill fields inside a dialog that never appeared | P1 | FR11 |
+| MS-09 | Step 2 arrives slower than the default timeout (dynamic-load fixture) | Fixture (b) with an artificial delay before inserting step 2 | Click step 1's Next | Waits up to the configured timeout for step 2's marker; times out with a specific message if it never appears (not a hang) | P2 | FR12 |
+
+---
+
 ## Coverage Notes
 
 - P0 cases are the target for loop increments 5-7 (validation + happy-path

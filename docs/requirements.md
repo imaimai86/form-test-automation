@@ -167,3 +167,134 @@ testable slice. Order/granularity may be adjusted once implementation starts.
 - No code for local HTML file or PDF form sources.
 - No plugin/abstraction system for multiple form sources — that's designed when
   Future Expansion work actually starts.
+
+## Multi-Step Forms (in a Dialog)
+
+Extends the tool to test multi-step ("wizard") forms — often presented inside
+a modal/dialog — where each step's submission advances to the next step, and
+the final step's submission is the real, terminal success/failure event.
+
+### Key design decision: one mechanism covers both step-delivery styles
+
+Two ways a wizard commonly delivers its next step were called out explicitly:
+
+1. **Already in the DOM, hidden** — all steps exist in the page's HTML from
+   load; JS toggles visibility (and runs validation) when "Next" is clicked.
+2. **Loaded dynamically** — only the current step exists in the DOM; clicking
+   "Next" triggers an AJAX/fetch call whose response is inserted as the next
+   step's markup.
+
+**These do not need separate handling.** In both cases, the tool's job is the
+same: click the step's "next" control, then wait for the *next* step's marker
+selector to reach Playwright's `visible` state. Playwright's locator-based
+`waitFor({ state: "visible" })` doesn't care whether the element became
+visible via a CSS/display toggle on a pre-existing node or via markup freshly
+inserted into the DOM — both look identical from the auto-waiting API's point
+of view. So one runner, one wait mechanism, covers both scenarios; the two
+example fixtures built for this feature exist to *prove* that claim, not
+because the engine needs two code paths.
+
+### Functional Requirements
+
+- **FR10 — Multi-step form config.** A distinct config shape describes an
+  ordered list of steps. Each step has: a `stepMarkerSelector` (identifies
+  that this step is the currently-active/visible one — used both to confirm
+  arrival and, on a failed advance attempt, to confirm we're still there), a
+  `fields` list (same `FieldConfig` shape as single-step forms), and a
+  `nextSelector` (the control that advances to the next step, or performs the
+  real submission on the last step).
+- **FR11 — Optional dialog open trigger.** A config may specify an
+  `openTrigger` selector, clicked once after navigation to open the
+  modal/dialog containing the wizard, and an optional `dialogSelector` waited
+  on (visible) to confirm the dialog actually opened before the first step's
+  fields are touched. Forms not inside a dialog simply omit these.
+- **FR12 — Step-transition detection.** After filling a step's fields and
+  clicking its `nextSelector`, the tool waits for the *next* step's
+  `stepMarkerSelector` to become visible (see design decision above) — no
+  distinct code path for DOM-hidden vs. dynamically-loaded steps.
+- **FR13 — Per-step validation.** For a step's required/invalid field values,
+  fill that field with the invalid value (siblings valid), click the step's
+  `nextSelector`, and assert both: (a) the field's configured error appears,
+  and (b) the wizard did *not* advance — the current step's marker is still
+  visible (or, equivalently, the next step's marker never appears). Reuses
+  the existing `ValidationCaseResult` shape and the existing required/format
+  runners' logic, scoped to one step's fields at a time.
+- **FR14 — Final-step submission.** Clicking the last step's `nextSelector`
+  is treated as the real submission: the existing `success` criteria
+  mechanism (message/redirectUrl/response) applies unchanged.
+
+### Post-Submission Verification: Snapshot + Custom Validation
+
+Declarative `success` criteria (message/redirectUrl/response) cover the
+common cases, but not everything a real form's post-submit state needs
+checking against. Two additions, applying to both the existing single-step
+`runHappyPathSubmission` and the new multi-step final-step submission:
+
+- **FR15 — DOM snapshot on submission result.** A config may list
+  `snapshotSelectors: string[]`. After the submission attempt (regardless of
+  pass/fail), the tool captures, for each selector: whether it matched
+  anything, whether it's visible, and its text content — attached to the
+  returned result object (not printed as pass/fail lines, just structured
+  data) so a caller can inspect the actual resulting page state without
+  re-running the browser. Included in the JSON report output.
+- **FR16 — Custom validation hook (library API only).** Since arbitrary logic
+  can't be expressed in a JSON config, a library caller may pass
+  `validate?: (page: Page) => Promise<{ passed: boolean; message: string }>`
+  as a runner option. If provided, its result is combined (ANDed) with any
+  configured declarative `success` criteria — same pattern as the existing
+  `message`/`redirectUrl`/`response` checks, just one more check in the list.
+  This is how a consumer expresses "run my own assertions against the final
+  page" without our tool needing to anticipate every possible check.
+
+### Multi-Step Config Schema (sketch)
+
+```jsonc
+{
+  "name": "signup-wizard",
+  "url": "https://example.com/signup",
+  "openTrigger": "#open-signup-dialog",
+  "dialogSelector": "#signup-dialog",
+  "steps": [
+    {
+      "name": "account-details",
+      "stepMarkerSelector": "#step-account",
+      "fields": [
+        { "name": "email", "selector": "#email", "type": "email", "required": true, "validValue": "user@example.com", "invalidValues": [{ "value": "", "expectedError": "#email-error" }] }
+      ],
+      "nextSelector": "#step-account-next"
+    },
+    {
+      "name": "profile",
+      "stepMarkerSelector": "#step-profile",
+      "fields": [
+        { "name": "displayName", "selector": "#displayName", "type": "text", "required": true, "validValue": "Jane", "invalidValues": [{ "value": "", "expectedError": "#name-error" }] }
+      ],
+      "nextSelector": "#step-profile-submit"
+    }
+  ],
+  "success": {
+    "message": { "selector": "#signup-success", "text": "Welcome" }
+  },
+  "snapshotSelectors": ["#signup-success", "#account-summary"]
+}
+```
+
+### Implementation Roadmap Addition (increments 12-16)
+
+12. Multi-step schema + config loader (`MultiStepFormConfig`, `FormStep`
+    types; `loadMultiStepFormConfig` + validation). Refactor
+    `fillFormFields` to accept a `FieldConfig[]` directly (rather than a
+    whole `FormConfig`) so it's reusable for a single step's fields.
+13. Two local fixtures proving the "one mechanism, two delivery styles"
+    claim: (a) a 3-step wizard with all steps already in the DOM, hidden via
+    CSS and revealed by JS on valid "Next" clicks, inside a dialog opened by
+    a trigger button; (b) a 2-step wizard where step 2's markup is fetched
+    and inserted into the DOM only after step 1's "Next" is clicked
+    successfully, also inside a dialog.
+14. `runMultiStepHappyPath` runner (+ snapshot/validate-hook support, also
+    retrofitted to the existing `runHappyPathSubmission`), verified against
+    both fixtures end-to-end.
+15. `runMultiStepStepValidation` runner (per-step required/invalid-value
+    checks + "did not advance" assertion), verified against both fixtures.
+16. CLI/library wiring (auto-detect a multi-step config by the presence of
+    `steps` vs. `fields`), README multi-step usage example, test reports.

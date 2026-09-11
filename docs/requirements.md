@@ -73,6 +73,16 @@ browser (`page.goto(url)`).
   ignored.
 - **CI-friendly** — non-zero exit code on any failing test case; machine-readable
   report output available (JSON) alongside a human-readable one.
+- **Graceful failure, never a crash.** Since this tool exists to test forms,
+  the expected failure modes (a selector not found, a config missing a field,
+  a network timeout, an unexpected page state) must never surface as an
+  uncaught exception/raw stack trace. Every such failure is caught at the
+  point it occurs, turned into a specific, human-readable message (what was
+  being attempted, what was expected, what actually happened), and recorded
+  as a failed test case (or a load-time config error) rather than aborting
+  the whole run. The CLI's top-level entry point also catches anything
+  unexpected as a last resort and prints a clean message instead of a stack
+  trace.
 - **Extensible by construction** — the "form source" concept (currently just a
   URL) should be easy to generalize later without reworking the field-filling
   or assertion engine (see Future Expansion above), but no such abstraction is

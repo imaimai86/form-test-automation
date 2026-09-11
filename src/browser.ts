@@ -17,32 +17,44 @@ export interface BrowserSession {
 export interface OpenFormPageOptions {
   /** Run headless (default true). Set false for local debugging. */
   headless?: boolean;
-  /** Navigation timeout in milliseconds (default 30s). */
+  /** Navigation timeout in milliseconds, per attempt (default 30s). */
   timeoutMs?: number;
+  /** Total navigation attempts before giving up (default 2, i.e. one retry). */
+  retries?: number;
 }
 
 /**
- * Launches a browser and navigates to a form's URL. On any navigation
- * failure (DNS, timeout, non-2xx response Playwright surfaces as an error,
- * etc.) the browser is closed and a NavigationError with a clear message is
- * thrown — callers never see a raw Playwright exception.
+ * Launches a browser and navigates to a form's URL, retrying on failure
+ * (transient DNS hiccups and slow-loading pages against real hosted sites
+ * are common) up to `retries` attempts with a short pause between. Only
+ * after every attempt fails is the browser closed and a NavigationError
+ * with the last failure's reason thrown — callers never see a raw
+ * Playwright exception.
  */
 export async function openFormPage(url: string, options: OpenFormPageOptions = {}): Promise<BrowserSession> {
   const headless = options.headless ?? true;
   const timeoutMs = options.timeoutMs ?? 30_000;
+  const retries = options.retries ?? 2;
 
   const browser = await chromium.launch({ headless });
   const page = await browser.newPage();
 
-  try {
-    await page.goto(url, { timeout: timeoutMs, waitUntil: "domcontentloaded" });
-  } catch (err) {
-    await browser.close();
-    const reason = err instanceof Error ? err.message : String(err);
-    throw new NavigationError(`Could not load form at "${url}": ${reason}`);
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      await page.goto(url, { timeout: timeoutMs, waitUntil: "domcontentloaded" });
+      return { browser, page };
+    } catch (err) {
+      lastError = err;
+      if (attempt < retries) {
+        await page.waitForTimeout(500);
+      }
+    }
   }
 
-  return { browser, page };
+  await browser.close();
+  const reason = lastError instanceof Error ? lastError.message : String(lastError);
+  throw new NavigationError(`Could not load form at "${url}" after ${retries} attempt(s): ${reason}`);
 }
 
 /** Closes the browser for a session opened with openFormPage. */

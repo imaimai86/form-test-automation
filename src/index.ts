@@ -9,5 +9,6 @@ export { loadFormConfig, loadFormConfigs, validateFormConfig } from "./config";
 export { openFormPage, closeSession, BrowserSession, OpenFormPageOptions, NavigationError } from "./browser";
 export { fillField, FieldFiller, FieldNotFoundError, FieldFillError } from "./fields";
 export { runRequiredFieldValidation, runFieldFormatValidation, ValidationCaseResult, ValidationCaseStatus } from "./runner";
+export { runHappyPathSubmission, SubmissionResult, SuccessCheckResult, SuccessCriterionKind } from "./runner";
 
 export const VERSION = "0.1.0";

@@ -1,5 +1,5 @@
-import type { Page } from "playwright";
-import { FieldConfig, FormConfig } from "./types";
+import type { Page, Response } from "playwright";
+import { FieldConfig, FormConfig, SuccessMessageCriterion, SuccessResponseCriterion } from "./types";
 import { closeSession, openFormPage, OpenFormPageOptions } from "./browser";
 import { fillField } from "./fields";
 import { FormTestAutomationError } from "./errors";
@@ -168,4 +168,149 @@ export async function runFieldFormatValidation(
   }
 
   return results;
+}
+
+export type SuccessCriterionKind = "message" | "redirectUrl" | "response";
+
+export interface SuccessCheckResult {
+  criterion: SuccessCriterionKind;
+  passed: boolean;
+  message: string;
+}
+
+export interface SubmissionResult {
+  status: "passed" | "failed";
+  checks: SuccessCheckResult[];
+  message: string;
+}
+
+async function checkMessageCriterion(
+  page: Page,
+  criterion: SuccessMessageCriterion,
+  timeoutMs: number
+): Promise<SuccessCheckResult> {
+  try {
+    const locator = page.locator(criterion.selector);
+    await locator.waitFor({ state: "visible", timeout: timeoutMs });
+    if (criterion.text !== undefined) {
+      const actualText = (await locator.textContent()) ?? "";
+      if (!actualText.includes(criterion.text)) {
+        return {
+          criterion: "message",
+          passed: false,
+          message: `Success message at "${criterion.selector}" appeared but did not contain "${criterion.text}" (got "${actualText.trim()}")`,
+        };
+      }
+    }
+    return { criterion: "message", passed: true, message: `Success message at "${criterion.selector}" appeared as expected` };
+  } catch {
+    return {
+      criterion: "message",
+      passed: false,
+      message: `Success message at "${criterion.selector}" did not appear within ${timeoutMs}ms`,
+    };
+  }
+}
+
+async function checkRedirectCriterion(page: Page, redirectUrl: string, timeoutMs: number): Promise<SuccessCheckResult> {
+  try {
+    await page.waitForURL(redirectUrl, { timeout: timeoutMs });
+    return { criterion: "redirectUrl", passed: true, message: `Page redirected to "${redirectUrl}" as expected` };
+  } catch {
+    return {
+      criterion: "redirectUrl",
+      passed: false,
+      message: `Page did not redirect to "${redirectUrl}" within ${timeoutMs}ms (current URL: "${page.url()}")`,
+    };
+  }
+}
+
+async function checkResponseCriterion(
+  responsePromise: Promise<Response> | undefined,
+  timeoutMs: number
+): Promise<SuccessCheckResult> {
+  if (!responsePromise) {
+    return { criterion: "response", passed: false, message: "No matching network response was observed" };
+  }
+  try {
+    const response = await responsePromise;
+    return {
+      criterion: "response",
+      passed: true,
+      message: `Matching network response observed (url="${response.url()}" status=${response.status()})`,
+    };
+  } catch {
+    return {
+      criterion: "response",
+      passed: false,
+      message: `No network response matching the configured criteria was observed within ${timeoutMs}ms`,
+    };
+  }
+}
+
+/**
+ * Fills every field with its valid value, submits, and asserts every
+ * success criterion configured on `config.success` (message, redirectUrl,
+ * response — any combination, all of the ones present must pass). Returns
+ * a single SubmissionResult with a per-criterion breakdown; never throws
+ * for an expected outcome (a criterion not being met is a "failed" check,
+ * not an exception).
+ */
+export async function runHappyPathSubmission(
+  config: FormConfig,
+  options: OpenFormPageOptions & { timeoutMs?: number } = {}
+): Promise<SubmissionResult> {
+  const timeoutMs = options.timeoutMs ?? 10_000;
+  const session = await openFormPage(config.url, options);
+
+  try {
+    await fillFormFields(session.page, config, {}, new Set(), timeoutMs);
+
+    let responsePromise: Promise<Response> | undefined;
+    if (config.success.response) {
+      const { urlPattern, status } = config.success.response;
+      responsePromise = session.page.waitForResponse(
+        (response) =>
+          (urlPattern === undefined || response.url().includes(urlPattern)) &&
+          (status === undefined || response.status() === status),
+        { timeout: timeoutMs }
+      );
+      // Attach a no-op handler now so Node never reports this as an
+      // unhandled rejection if it rejects before checkResponseCriterion
+      // gets around to awaiting it below.
+      responsePromise.catch(() => {});
+    }
+
+    await session.page.locator(config.submitSelector).click();
+
+    const checks: SuccessCheckResult[] = [];
+    if (config.success.message) {
+      checks.push(await checkMessageCriterion(session.page, config.success.message, timeoutMs));
+    }
+    if (config.success.redirectUrl) {
+      checks.push(await checkRedirectCriterion(session.page, config.success.redirectUrl, timeoutMs));
+    }
+    if (config.success.response) {
+      checks.push(await checkResponseCriterion(responsePromise, timeoutMs));
+    }
+
+    const failedCount = checks.filter((c) => !c.passed).length;
+    const allPassed = checks.length > 0 && failedCount === 0;
+    return {
+      status: allPassed ? "passed" : "failed",
+      checks,
+      message: allPassed
+        ? "All configured success criteria were met"
+        : `${failedCount} of ${checks.length} success criteria failed`,
+    };
+  } catch (err) {
+    const reason = err instanceof FormTestAutomationError || err instanceof Error ? err.message : String(err);
+    return {
+      status: "failed",
+      checks: [],
+      message: `Could not complete the happy-path submission: ${reason}`,
+    };
+  } finally {
+    await closeSession(session);
+  }
 }

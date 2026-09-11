@@ -294,8 +294,13 @@ function validateCrossFieldValidation(
   });
 }
 
-/** Reads and JSON-parses a config file, throwing a ConfigError for a missing file or invalid JSON. */
-function readJsonConfigFile(filePath: string): unknown {
+/**
+ * Reads and JSON-parses a config file, throwing a ConfigError for a missing
+ * file or invalid JSON. Exported so the CLI can detect a file's config
+ * shape (single-step vs multi-step, via isMultiStepConfigData) before
+ * choosing which validator to run, without parsing the file twice.
+ */
+export function readJsonConfigFile(filePath: string): unknown {
   let raw: string;
   try {
     raw = fs.readFileSync(filePath, "utf-8");
@@ -402,10 +407,13 @@ export function validateMultiStepFormConfig(data: unknown, sourceLabel: string):
 }
 
 /**
- * Loads all form configs from a path: a single config file, or every
- * `*.json` file in a directory (non-recursive, sorted for stable ordering).
+ * Resolves a config path argument to the list of files it refers to: the
+ * path itself if it's a file, or every `*.json` file in it (non-recursive,
+ * sorted for stable ordering) if it's a directory. Exported so the CLI can
+ * apply per-file shape detection (single-step vs multi-step) across a
+ * directory, rather than assuming every file in it is the same shape.
  */
-export function loadFormConfigs(target: string): FormConfig[] {
+export function resolveConfigPaths(target: string): string[] {
   let stat: fs.Stats;
   try {
     stat = fs.statSync(target);
@@ -421,8 +429,19 @@ export function loadFormConfigs(target: string): FormConfig[] {
     if (files.length === 0) {
       throw new ConfigError(`No .json config files found in directory: ${target}`);
     }
-    return files.map((f) => loadFormConfig(path.join(target, f)));
+    return files.map((f) => path.join(target, f));
   }
 
-  return [loadFormConfig(target)];
+  return [target];
+}
+
+/**
+ * Loads all form configs from a path: a single config file, or every
+ * `*.json` file in a directory (non-recursive, sorted for stable ordering).
+ * Assumes every file is a single-step FormConfig — use resolveConfigPaths +
+ * readJsonConfigFile + isMultiStepConfigData (as the CLI does) for a
+ * directory that may contain a mix of single-step and multi-step configs.
+ */
+export function loadFormConfigs(target: string): FormConfig[] {
+  return resolveConfigPaths(target).map((filePath) => loadFormConfig(filePath));
 }

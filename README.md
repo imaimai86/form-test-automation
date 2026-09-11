@@ -81,6 +81,65 @@ expected test outcome (a failed assertion is a `status: "failed"` result,
 not an exception). See `docs/requirements.md` for the full list of exports
 and their shapes.
 
+## Multi-step forms (wizards in a dialog)
+
+A separate config shape handles multi-step wizards — including ones inside a
+modal/dialog, and steps that arrive already in the DOM (just hidden) or get
+inserted dynamically after an AJAX call. The CLI and library both
+auto-detect this shape (presence of `"steps"` instead of `"fields"`) with no
+extra flags:
+
+```jsonc
+{
+  "name": "signup-wizard",
+  "url": "https://example.com/signup",
+  "openTrigger": "#open-signup-dialog",
+  "dialogSelector": "#signup-dialog",
+  "steps": [
+    {
+      "name": "account",
+      "stepMarkerSelector": "#step-account",
+      "fields": [
+        { "name": "email", "selector": "#email", "type": "email", "required": true, "validValue": "user@example.com", "invalidValues": [{ "value": "", "expectedError": "#email-error" }] }
+      ],
+      "nextSelector": "#account-next"
+    },
+    {
+      "name": "profile",
+      "stepMarkerSelector": "#step-profile",
+      "fields": [
+        { "name": "displayName", "selector": "#displayName", "type": "text", "required": true, "validValue": "Jane", "invalidValues": [{ "value": "", "expectedError": "#name-error" }] }
+      ],
+      "nextSelector": "#profile-submit"
+    }
+  ],
+  "success": { "message": { "selector": "#signup-success", "text": "Welcome" } }
+}
+```
+
+```bash
+npx fill-forms path/to/wizard.config.json
+```
+
+```ts
+import { loadMultiStepFormConfig, runMultiStepStepValidation, runMultiStepHappyPath } from "form-test-automation";
+
+const config = loadMultiStepFormConfig("path/to/wizard.config.json");
+
+const stepIssues = await runMultiStepStepValidation(config); // per-step required/format checks, blocks-advancement asserted
+const result = await runMultiStepHappyPath(config);           // fills every step, submits, checks success criteria
+```
+
+Additional capabilities available on both the single-step and multi-step
+shapes — see `docs/requirements.md` ("Multi-Step Forms (in a Dialog)") for
+full detail:
+- **`waits`** (top-level or per-step) — wait for a selector, a field's value, or a fixed delay before proceeding, for content that's still settling (a loading spinner, a value populated by another field's change handler, a freshly-inserted step).
+- **`snapshotSelectors`** — captures each selector's matched/visible/text state on the submission result, for post-hoc inspection without re-running.
+- **`validate`** (library option, both `runHappyPathSubmission` and `runMultiStepHappyPath`) — a custom `(page) => Promise<{passed, message}>` hook, ANDed with the declarative success criteria, for logic beyond selector/text matching.
+
+A mixed directory of single-step and multi-step config files works
+transparently — each file's shape is detected independently.
+
 ## Writing a form config
 
 A config describes one form: its URL, each field's selector/type/valid and

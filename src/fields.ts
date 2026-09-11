@@ -1,6 +1,11 @@
 import type { Page } from "playwright";
 import { FieldConfig, FieldType } from "./types";
 import { FormTestAutomationError } from "./errors";
+import { fillSelectField } from "./field-handlers/select";
+import { fillCheckboxField } from "./field-handlers/checkbox";
+import { fillRadioField } from "./field-handlers/radio";
+import { fillDateField } from "./field-handlers/date";
+import { fillFileField } from "./field-handlers/file";
 
 /** Raised when a field's selector never resolves to a visible element. */
 export class FieldNotFoundError extends FormTestAutomationError {
@@ -20,8 +25,7 @@ export class FieldFillError extends FormTestAutomationError {
 
 /**
  * A field handler knows how to fill one category of field type. Each field
- * type is registered independently in FIELD_FILLERS below, so new types
- * (select, checkbox, radio, date, file — added in a later increment) plug
+ * type is registered independently in FIELD_FILLERS below, so new types plug
  * in without touching existing handlers.
  */
 export type FieldFiller = (page: Page, field: FieldConfig, value: string, timeoutMs: number) => Promise<void>;
@@ -39,6 +43,11 @@ const FIELD_FILLERS: Partial<Record<FieldType, FieldFiller>> = {
   password: fillTextLike,
   number: fillTextLike,
   textarea: fillTextLike,
+  select: fillSelectField,
+  checkbox: fillCheckboxField,
+  radio: fillRadioField,
+  date: fillDateField,
+  file: fillFileField,
 };
 
 const DEFAULT_TIMEOUT_MS = 10_000;

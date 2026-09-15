@@ -276,6 +276,38 @@ Only hosted forms (reachable by URL) are supported today. Local HTML files
 and PDF forms are noted as future scope in `docs/requirements.md` but are
 not implemented yet.
 
+## Changelog
+
+### 0.1.2
+
+- Added `get_fill_plan` MCP tool — config in, data out, no browser opened.
+  Returns a flat `{selector, type, value}` list for filling through a
+  *different* browser-controlling tool (e.g. `claude-in-chrome`'s
+  `read_page`/`form_input` against a real, already-open tab) instead of
+  this library's own Playwright session. Fill-only, not a substitute for
+  `run_form_test`/`run_multistep_form_test`.
+- Fixed: the exported `VERSION` and the MCP server's `serverInfo.version`
+  were hardcoded literals that never tracked `package.json` — both `0.1.0`
+  and `0.1.1` on the registry reported the wrong version. Now derived live
+  from `package.json`.
+
+### 0.1.1
+
+- Added `storageState` support for testing forms behind a login (SSO/MFA)
+  the tool can't complete on its own — reuse an already-authenticated
+  session (Playwright's own cookies + localStorage format) as a config
+  field, a library option, or an `open_session` MCP parameter.
+
+### 0.1.0
+
+- First published release. CLI (`fill-forms`), library, and MCP server
+  (`html-automation-mcp`) interfaces from one package. Single-step and
+  multi-step (wizard/dialog) form testing, all 10 field types, required/
+  format/cross-field validation, happy-path submission checks, DOM
+  snapshots, a custom `validate` hook, and a `waits` primitive.
+
+See [GitHub Releases](https://github.com/imaimai86/form-test-automation/releases) for details.
+
 ## Development
 
 ```bash

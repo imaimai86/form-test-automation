@@ -298,3 +298,98 @@ checking against. Two additions, applying to both the existing single-step
     checks + "did not advance" assertion), verified against both fixtures.
 16. CLI/library wiring (auto-detect a multi-step config by the presence of
     `steps` vs. `fields`), README multi-step usage example, test reports.
+
+## MCP Interface (AI-Driven Form Filling and Verification)
+
+The tool gains a third interface alongside the CLI and library: an MCP
+(Model Context Protocol) server, so an AI agent (Claude Code, Claude
+Desktop, any MCP client) can fill and verify forms through tool calls
+directly — either exploring a form interactively with no pre-written config,
+or running the existing config-driven test suites as a single tool call.
+
+**Same package, not a separate one.** The MCP server ships as an additional
+`bin` entry in this package's `package.json` (e.g. `form-test-mcp`), and its
+startup logic is also exported from the library (`startMcpServer()`) so a
+consumer can embed it in their own process rather than only spawning it as a
+standalone binary. This mirrors how the CLI (`fill-forms`/
+`form-test-automation`) and the library exports already coexist in one
+package.
+
+### Functional Requirements
+
+- **FR17 — MCP server, stdio transport.** A `Server`/`McpServer` (via the
+  official `@modelcontextprotocol/sdk`) speaking MCP over stdio — the
+  standard transport for a local, browser-driving tool like this one, since
+  it has to run on the same machine as the browser it controls anyway. No
+  HTTP/SSE transport in v1.
+- **FR18 — Interactive session tools**, for AI-driven filling without a
+  pre-written config. Sessions are explicit and stateful: an MCP tool call
+  is a single stateless request, but filling a form is inherently multi-step
+  (see something, act, see the result, act again), so a session must persist
+  a real Playwright `Page` across multiple tool calls. Implemented as an
+  in-memory `Map<sessionId, BrowserSession>` inside the server process,
+  keyed by a generated UUID the AI passes back on every subsequent call.
+  Tools:
+  - `open_session(url, headless?)` → `{ sessionId }`
+  - `close_session(sessionId)` → closes the browser, frees the session
+  - `discover_fields(sessionId, withinSelector?)` → scans the page (or a
+    scoped container) for form-like elements and returns, per element: a
+    usable selector, tag/input type, `name`, associated label text (via
+    `<label for>` or nearest wrapping `<label>`), current value, and whether
+    it's marked required — so the AI doesn't need hand-authored selectors to
+    get started.
+  - `fill_field(sessionId, selector, type, value)` → reuses the existing
+    `fillField` engine (all 10 field types), wrapping the input in a minimal
+    ad hoc `FieldConfig`.
+  - `click(sessionId, selector)` → generic click (submit buttons, "Next"
+    controls, anything).
+  - `inspect_element(sessionId, selector)` → reuses `inspectElement`
+    directly (`{matched, visible, text}`).
+  - `wait_for(sessionId, condition)` → reuses `performWaits` with a single
+    `WaitCondition`.
+  - `get_page_text(sessionId)` → the page's visible text (`innerText`),
+    truncated to a sane length, for the AI to read context/error messages it
+    doesn't have a selector for yet.
+  - **Idle-session safety net**: a session unused for a configurable timeout
+    (default e.g. 10 minutes) is closed automatically, so a crashed/forgetful
+    MCP client doesn't leak Chromium processes indefinitely. Explicit
+    `close_session` remains the normal path.
+- **FR19 — Config-driven batch tools**, thin wrappers around the *existing*
+  runners — no new test logic, just an MCP-shaped entry point:
+  - `validate_form_config(config)` → schema validation only (accepts either
+    shape; reuses `isMultiStepConfigData` + the matching `validate*`
+    function), returns a clear pass/fail + error detail, no browser launched.
+  - `run_form_test(config)` → runs the full single-step suite (required,
+    format, cross-field, happy-path, double-submit, back-button) and returns
+    the aggregated results, mirroring the CLI's `--json` report shape.
+  - `run_multistep_form_test(config)` → runs `runMultiStepStepValidation` +
+    `runMultiStepHappyPath` and returns the aggregated results.
+  - `config` is accepted as an inline JSON object in every tool (an AI
+    composing a config on the fly doesn't need a file on disk), with a file
+    path also accepted as a convenience.
+- **FR20 — Every tool fails gracefully.** Consistent with "Graceful failure,
+  never a crash" elsewhere in this document: a tool call that hits an
+  expected failure (bad selector, unknown session ID, invalid config, a
+  timed-out wait) returns an MCP tool error result with a specific message —
+  never an uncaught exception that kills the server process or leaves a
+  client hanging.
+
+### Implementation Roadmap (increments 17-20)
+
+17. MCP server scaffold: add `@modelcontextprotocol/sdk` (and `zod` if the
+    chosen tool-registration API calls for schema objects) as dependencies,
+    stdio server setup, session store with idle-timeout cleanup, new `bin`
+    entry, `startMcpServer()` library export. Verify by spawning the server
+    as a real subprocess and speaking raw MCP JSON-RPC over its stdio
+    (`initialize`, `tools/list`) — proving the protocol handshake actually
+    works, not just that the code compiles.
+18. Interactive session tools (FR18) — `open_session` through
+    `get_page_text`. Verify against a real fixture via actual MCP tool
+    calls over stdio: open a session, discover fields, fill one, click,
+    inspect the result, close the session — the full interactive loop.
+19. Config-driven batch tools (FR19) — verify against both a real single-step
+    config and a multi-step config via actual tool calls, confirming results
+    match what the CLI produces for the same config.
+20. Polish: README section on configuring this as an MCP server in Claude
+    Code (`.mcp.json` snippet) and other clients, final regression across
+    CLI/library/MCP, test reports.

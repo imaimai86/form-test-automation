@@ -222,6 +222,27 @@ the tool has two code paths).
 
 ---
 
+## 8. MCP Interface Test Cases
+
+See `docs/requirements.md`, "MCP Interface (AI-Driven Form Filling and
+Verification)" for the tool surface and design.
+
+| ID | Description | Preconditions | Steps | Expected Result | Priority | FR |
+|----|---|---|---|---|---|---|
+| MCP-01 | Server responds to MCP handshake | Server spawned as a subprocess over stdio | Send `initialize`, then `tools/list` | Valid MCP responses; all documented tools listed with schemas | P0 | FR17 |
+| MCP-02 | `open_session` then `close_session` | Server running | Call `open_session(url)`, then `close_session(sessionId)` | Returns a session ID; browser closes cleanly on `close_session` | P0 | FR18 |
+| MCP-03 | `discover_fields` finds real form fields | A fixture page with known inputs | Call `discover_fields(sessionId)` | Returns selectors/types/labels matching the fixture's actual fields | P0 | FR18 |
+| MCP-04 | `fill_field` + `inspect_element` round-trip | Open session on a fixture | Fill a text field, then inspect a related element (e.g. its container or an echo) | Filled value reflected; inspected element's state matches expectation | P0 | FR18 |
+| MCP-05 | `click` advances a multi-step wizard | Open session on a wizard fixture, dialog open, step 1 filled | Call `click(sessionId, nextSelector)` | Next step's marker becomes visible (same mechanism as increment 14) | P0 | FR18 |
+| MCP-06 | `wait_for` blocks until a condition is met | Fixture with delayed content (reuse the increment-12 waits fixture pattern) | Call `wait_for` with a `"value"` condition | Resolves only once the value actually matches; times out with a clear error if it never does | P1 | FR18 |
+| MCP-07 | Unknown `sessionId` fails gracefully | No session opened, or already closed | Call any session-scoped tool with a bogus ID | MCP tool error result with a specific message, not an uncaught exception/crash | P0 | FR20 |
+| MCP-08 | Idle session auto-closed | Session opened, left untouched past the idle timeout (use a short timeout for the test) | Wait past the timeout, then call a tool with that session ID | Tool reports the session as gone/expired, not a hang or crash | P1 | FR18 |
+| MCP-09 | `run_form_test` matches CLI output for the same config | A real single-step config (e.g. `examples/login-form.config.json`) | Call `run_form_test(config)` via MCP, and `fill-forms` via CLI, on the same config | Same pass/fail/skip outcome for every case | P0 | FR19 |
+| MCP-10 | `run_multistep_form_test` matches CLI output for the same config | A multi-step fixture config | Call `run_multistep_form_test(config)` via MCP, and the CLI, on the same config | Same pass/fail/skip outcome | P0 | FR19 |
+| MCP-11 | `validate_form_config` catches a bad config without launching a browser | A deliberately malformed config (inline JSON) | Call `validate_form_config` | Specific `ConfigError`-equivalent message; no navigation/browser launch attempted | P1 | FR19 |
+
+---
+
 ## Coverage Notes
 
 - P0 cases are the target for loop increments 5-7 (validation + happy-path

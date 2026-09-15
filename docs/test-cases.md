@@ -258,6 +258,22 @@ See `docs/requirements.md`, "Session Reuse via Playwright storageState" (FR21).
 
 ---
 
+## 10. Fill Plan Test Cases
+
+See `docs/requirements.md`, "Fill Plans for Other Browser Surfaces" (FR22).
+
+| ID | Description | Preconditions | Steps | Expected Result | Priority | FR |
+|----|---|---|---|---|---|---|
+| FP-01 | Single-step config returns a flat fill plan | A real single-step config | Call `get_fill_plan` | `{shape: "single-step", fields: [{selector, type, value}, ...], submitSelector, success}` | P0 | FR22 |
+| FP-02 | Multi-step config returns a per-step fill plan | A real multi-step config | Call `get_fill_plan` | `{shape: "multi-step", steps: [{name, stepMarkerSelector, fields, nextSelector}, ...]}` | P0 | FR22 |
+| FP-03 | Checkbox value resolved to a real boolean | Field with `type: "checkbox"`, `validValue: "true"` | Call `get_fill_plan` | `value: true` (not the string `"true"`) | P0 | FR22 |
+| FP-04 | Unrecognized checkbox value | `validValue` outside the truthy/falsy word list | Call `get_fill_plan` | `value` passed through as-is, with a `note` explaining it wasn't recognized (not a thrown error) | P1 | FR22 |
+| FP-05 | Radio field annotated | Field with `type: "radio"` | Call `get_fill_plan` | `value: true` with a `note` explaining the selector targets one specific option | P1 | FR22 |
+| FP-06 | File field annotated, not silently claimed fillable | Field with `type: "file"` | Call `get_fill_plan` | `value` is the configured path, with a `note` that this can't be filled by setting a value | P0 | FR22 |
+| FP-07 | No browser launched | Any config, no fixture/target server running | Call `get_fill_plan` | Succeeds regardless — pure config parsing, confirming it's genuinely browser-free | P1 | FR22 |
+
+---
+
 ## Coverage Notes
 
 - P0 cases are the target for loop increments 5-7 (validation + happy-path

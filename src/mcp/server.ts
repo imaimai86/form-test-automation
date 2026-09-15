@@ -4,6 +4,7 @@ import { BrowserSession } from "../browser";
 import { VERSION } from "../version";
 import { registerSessionTools } from "./tools";
 import { registerBatchTools } from "./batch-tools";
+import { registerFillPlanTool } from "./fill-plan";
 
 const DEFAULT_IDLE_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -56,6 +57,7 @@ export function createMcpServer(options: StartMcpServerOptions = {}): {
 
   registerSessionTools(server, sessions);
   registerBatchTools(server);
+  registerFillPlanTool(server);
 
   return { server, sessions, stopIdleCleanup: () => clearInterval(cleanupTimer) };
 }

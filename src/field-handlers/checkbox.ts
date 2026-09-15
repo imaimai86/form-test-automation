@@ -6,9 +6,11 @@ const FALSY_VALUES = new Set(["false", "0", "no", "off", "unchecked", ""]);
 
 /**
  * Parses a checkbox field's string value into a boolean. Case-insensitive
- * and trimmed. Throws a plain Error for anything not recognized.
+ * and trimmed. Throws a plain Error for anything not recognized. Exported
+ * so other consumers (e.g. the MCP get_fill_plan tool) can resolve the same
+ * true/false convention without duplicating the word lists.
  */
-function parseCheckboxValue(value: string): boolean {
+export function parseCheckboxValue(value: string): boolean {
   const normalized = value.trim().toLowerCase();
   if (TRUTHY_VALUES.has(normalized)) {
     return true;

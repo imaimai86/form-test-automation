@@ -204,6 +204,17 @@ uses — `config` accepts a file path or an inline JSON object):
 | `run_form_test(config, headless?, timeoutMs?)` | Full single-step suite |
 | `run_multistep_form_test(config, headless?, timeoutMs?)` | Full multi-step suite |
 
+**Fill-only, for a different browser surface**: `get_fill_plan(config)` — no
+browser launched. Returns a flat `{selector, type, value}` list from a
+config, with values resolved the same way `fillField` would (checkbox
+`"true"`/`"yes"`/etc. parsed to a real boolean, radios marked as "always
+check", file/select fields annotated with a usage note). For dispatching
+those fills through a *different* tool that drives a real, already-open
+browser tab directly — e.g. `claude-in-chrome`'s `read_page` + `form_input`
+— instead of this library's own Playwright session. It does not verify
+anything; it is not a substitute for `run_form_test`/`run_multistep_form_test`,
+which require a live Playwright page this tool never opens.
+
 ## Testing forms behind a login (storageState)
 
 For a form behind SSO/MFA/a login flow this tool can't complete on its own,

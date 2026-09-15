@@ -420,3 +420,28 @@ This is deliberately scoped to *reusing* an existing session, not automating
 the login itself — capturing/refreshing the storageState file is the
 consumer's responsibility (typically a one-time manual step, or their own
 scripted login flow, outside this tool).
+
+## Fill Plans for Other Browser Surfaces
+
+MCP has no mechanism for one server to call another server's tools — this
+server cannot itself dispatch a form fill through, say, `claude-in-chrome`'s
+`form_input`, since that tool belongs to a different MCP connection scoped
+to the calling agent, not to this server. What the agent itself *can* do is
+call both tool sets in the same turn — read a page via one, fill it via
+another. The gap that leaves is value-resolution: correctly parsing a
+config's `checkbox` truthy/falsy convention, knowing a `radio` field always
+means "check this specific option," flagging that a `file` field can't be
+filled by setting a value at all. Re-deriving that by eye, per field, is
+exactly the kind of thing worth not leaving to chance.
+
+- **FR22 — `get_fill_plan`.** A config-in, data-out MCP tool: given a
+  `FormConfig` or `MultiStepFormConfig` (file path or inline object), returns
+  a flat list of `{selector, type, value}` per field, with `value` resolved
+  the same way `fillField` would — reusing the actual parsing code (e.g.
+  `parseCheckboxValue`), not a re-implementation that could drift from it.
+  Opens no browser and runs no validation; it is explicitly **not** a
+  substitute for `run_form_test`/`run_multistep_form_test`, which depend on
+  a live Playwright `Page` this tool never creates. Intended for an agent
+  driving a *different* browser surface — a real, already-open tab via
+  `claude-in-chrome` or similar — to fill without re-deriving each field's
+  value-resolution logic itself.

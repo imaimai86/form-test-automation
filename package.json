@@ -13,13 +13,14 @@
   },
   "bin": {
     "form-test-automation": "dist/cli.js",
-    "fill-forms": "dist/cli.js"
+    "fill-forms": "dist/cli.js",
+    "form-test-mcp": "dist/mcp/bin.js"
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json && chmod +x dist/cli.js",
+    "build": "tsc -p tsconfig.json && chmod +x dist/cli.js dist/mcp/bin.js",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run build"
   },
@@ -36,7 +37,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "playwright": "^1.47.0"
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "playwright": "^1.47.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

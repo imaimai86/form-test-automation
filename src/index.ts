@@ -18,3 +18,5 @@ export { runCrossFieldValidation, runDoubleSubmitCheck, runBackButtonCheck } fro
 export { runMultiStepHappyPath, runMultiStepStepValidation } from "./runner";
 
 export const VERSION = "0.1.0";
+
+export { startMcpServer, StartMcpServerOptions } from "./mcp/server";

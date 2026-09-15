@@ -1,7 +1,7 @@
 {
-  "name": "form-test-automation",
+  "name": "html-automation-mcp",
   "version": "0.1.0",
-  "description": "Playwright-based automated testing for hosted HTML forms — usable as a CLI or as a library.",
+  "description": "Playwright-based automated testing and verification for hosted HTML forms — usable as a CLI, a library, or an MCP server for AI-driven form filling.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -12,9 +12,8 @@
     }
   },
   "bin": {
-    "form-test-automation": "dist/cli.js",
-    "fill-forms": "dist/cli.js",
-    "form-test-mcp": "dist/mcp/bin.js"
+    "html-automation-mcp": "dist/mcp/bin.js",
+    "fill-forms": "dist/cli.js"
   },
   "files": [
     "dist"
@@ -32,7 +31,9 @@
     "form-testing",
     "e2e",
     "testing",
-    "automation"
+    "automation",
+    "mcp",
+    "model-context-protocol"
   ],
   "author": "",
   "license": "Unlicense",

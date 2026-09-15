@@ -308,12 +308,12 @@ directly — either exploring a form interactively with no pre-written config,
 or running the existing config-driven test suites as a single tool call.
 
 **Same package, not a separate one.** The MCP server ships as an additional
-`bin` entry in this package's `package.json` (e.g. `form-test-mcp`), and its
-startup logic is also exported from the library (`startMcpServer()`) so a
-consumer can embed it in their own process rather than only spawning it as a
-standalone binary. This mirrors how the CLI (`fill-forms`/
-`form-test-automation`) and the library exports already coexist in one
-package.
+`bin` entry in this package's `package.json` (`html-automation-mcp`,
+matching the published package name so a bare `npx html-automation-mcp`
+resolves to it directly), and its startup logic is also exported from the
+library (`startMcpServer()`) so a consumer can embed it in their own process
+rather than only spawning it as a standalone binary. This mirrors how the
+CLI (`fill-forms`) and the library exports already coexist in one package.
 
 ### Functional Requirements
 

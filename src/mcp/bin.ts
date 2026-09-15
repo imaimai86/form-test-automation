@@ -5,7 +5,7 @@ import { startMcpServer } from "./server";
 // Optional override for verification/testing (e.g. exercising idle-session
 // cleanup without waiting out the real default). Not part of the public
 // config surface — undocumented on purpose.
-const idleTimeoutOverride = process.env.FORM_TEST_MCP_IDLE_TIMEOUT_MS;
+const idleTimeoutOverride = process.env.HTML_AUTOMATION_MCP_IDLE_TIMEOUT_MS;
 const idleTimeoutMs = idleTimeoutOverride ? Number(idleTimeoutOverride) : undefined;
 
 // Last-resort safety net, matching src/cli.ts's convention: an expected
@@ -15,6 +15,6 @@ const idleTimeoutMs = idleTimeoutOverride ? Number(idleTimeoutOverride) : undefi
 // instead of a raw stack trace.
 startMcpServer({ idleTimeoutMs }).catch((err) => {
   const message = err instanceof Error ? err.message : String(err);
-  console.error(`form-test-mcp: ${message}`);
+  console.error(`html-automation-mcp: ${message}`);
   process.exitCode = 1;
 });

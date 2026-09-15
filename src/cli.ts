@@ -142,6 +142,6 @@ async function main(): Promise<void> {
 // slipping through, so users never see a raw stack trace.
 main().catch((err) => {
   const message = err instanceof Error ? err.message : String(err);
-  console.error(`form-test-automation: ${message}`);
+  console.error(`html-automation-mcp: ${message}`);
   process.exitCode = 1;
 });

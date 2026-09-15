@@ -49,7 +49,7 @@ export function createMcpServer(options: StartMcpServerOptions = {}): {
   );
   cleanupTimer.unref();
 
-  const server = new McpServer({ name: "form-test-automation", version: MCP_SERVER_VERSION });
+  const server = new McpServer({ name: "html-automation-mcp", version: MCP_SERVER_VERSION });
 
   server.registerTool(
     "ping",

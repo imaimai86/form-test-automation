@@ -1,4 +1,4 @@
-# form-test-automation
+# html-automation-mcp
 
 Playwright-based automated testing for hosted HTML forms — declare a form's
 fields, validation rules, and success criteria in a JSON config, and this
@@ -10,7 +10,7 @@ verify forms through tool calls.
 ## Install
 
 ```bash
-npm install form-test-automation
+npm install html-automation-mcp
 ```
 
 Or run it without installing, via `npx` (see CLI usage below).
@@ -53,7 +53,7 @@ import {
   runFieldFormatValidation,
   runHappyPathSubmission,
   type FormConfig,
-} from "form-test-automation";
+} from "html-automation-mcp";
 
 const config: FormConfig = loadFormConfig("path/to/form.config.json");
 
@@ -66,7 +66,7 @@ console.log(happyPath.status); // "passed" | "failed"
 **Plain JavaScript / CommonJS:**
 
 ```js
-const { loadFormConfig, runHappyPathSubmission } = require("form-test-automation");
+const { loadFormConfig, runHappyPathSubmission } = require("html-automation-mcp");
 
 (async () => {
   const config = loadFormConfig("path/to/form.config.json");
@@ -124,7 +124,7 @@ npx fill-forms path/to/wizard.config.json
 ```
 
 ```ts
-import { loadMultiStepFormConfig, runMultiStepStepValidation, runMultiStepHappyPath } from "form-test-automation";
+import { loadMultiStepFormConfig, runMultiStepStepValidation, runMultiStepHappyPath } from "html-automation-mcp";
 
 const config = loadMultiStepFormConfig("path/to/wizard.config.json");
 
@@ -155,21 +155,22 @@ transport only.
 ```json
 {
   "mcpServers": {
-    "form-test-automation": {
+    "html-automation-mcp": {
       "command": "npx",
-      "args": ["-y", "form-test-automation", "form-test-mcp"]
+      "args": ["-y", "html-automation-mcp"]
     }
   }
 }
 ```
 
 (Any other MCP client that supports stdio servers configures the same way —
-point it at the `form-test-mcp` command.)
+point it at the `html-automation-mcp` command, which resolves directly since
+it matches the package name.)
 
 **Embedding directly** (no separate process):
 
 ```ts
-import { startMcpServer } from "form-test-automation";
+import { startMcpServer } from "html-automation-mcp";
 
 await startMcpServer({ idleTimeoutMs: 10 * 60 * 1000 }); // default shown
 ```

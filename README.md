@@ -239,3 +239,7 @@ npm run typecheck   # type-check without emitting
 
 Verification for each increment of this project's development is recorded
 under [`tests/result/`](tests/result/), one folder per feature.
+
+## License
+
+[The Unlicense](LICENSE) — public domain. Use it for anything, no attribution required.

@@ -35,7 +35,7 @@
     "automation"
   ],
   "author": "",
-  "license": "ISC",
+  "license": "Unlicense",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
     "playwright": "^1.47.0",

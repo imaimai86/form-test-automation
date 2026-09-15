@@ -78,6 +78,19 @@ export interface CrossFieldValidationCase {
   expectedError: string;
 }
 
+/**
+ * Playwright's own storage-state shape: cookies plus per-origin localStorage.
+ * A string is a file path (Playwright loads it directly); an object is the
+ * state already parsed. Produced by Playwright itself via
+ * `context.storageState()` — the standard way to log in once (manually or
+ * scripted) and reuse that session across later automated runs without
+ * re-authenticating each time. Intentionally looser than Playwright's own
+ * type here so callers don't need to import Playwright's internal
+ * cookie/origin types just to pass this through; Playwright validates the
+ * actual shape at runtime.
+ */
+export type StorageState = string | Record<string, unknown>;
+
 export interface FormConfig {
   /** Identifier for this form, used in reports and CLI output. */
   name: string;
@@ -93,6 +106,8 @@ export interface FormConfig {
   snapshotSelectors?: string[];
   /** Optional conditions waited on, in order, after navigation and before any field is filled. */
   waits?: WaitCondition[];
+  /** Optional saved session (cookies + localStorage) to start the browser already logged in. */
+  storageState?: StorageState;
 }
 
 export interface FormStep {
@@ -125,4 +140,6 @@ export interface MultiStepFormConfig {
   snapshotSelectors?: string[];
   /** Optional conditions waited on, in order, after navigation (and after opening the dialog, if configured) before the first step's fields are touched. */
   waits?: WaitCondition[];
+  /** Optional saved session (cookies + localStorage) to start the browser already logged in. */
+  storageState?: StorageState;
 }

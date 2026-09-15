@@ -208,7 +208,9 @@ export function validateFormConfig(data: unknown, sourceLabel: string): FormConf
 
   const waits = data.waits !== undefined ? validateWaitConditions(data.waits, context) : undefined;
 
-  return { name, url, submitSelector, fields, success, crossFieldValidation, snapshotSelectors, waits };
+  const storageState = data.storageState !== undefined ? validateStorageState(data.storageState, context) : undefined;
+
+  return { name, url, submitSelector, fields, success, crossFieldValidation, snapshotSelectors, waits, storageState };
 }
 
 function validateWaitCondition(raw: unknown, index: number, context: string): WaitCondition {
@@ -247,6 +249,26 @@ function validateWaitConditions(raw: unknown, context: string): WaitCondition[] 
     throw new ConfigError(`${context}: "waits" must be an array`);
   }
   return raw.map((w, i) => validateWaitCondition(w, i, context));
+}
+
+/**
+ * A string (file path) or a plain object (already-parsed storage state).
+ * Not deep-validated beyond that — the exact cookies/origins shape is
+ * Playwright's concern at session-start time (see src/browser.ts), and
+ * over-validating here risks rejecting a perfectly valid file Playwright
+ * itself produced.
+ */
+function validateStorageState(raw: unknown, context: string): string | Record<string, unknown> {
+  if (typeof raw === "string") {
+    if (raw.trim() === "") {
+      throw new ConfigError(`${context}: "storageState" must be a non-empty string (file path) or an object`);
+    }
+    return raw;
+  }
+  if (isPlainObject(raw)) {
+    return raw;
+  }
+  throw new ConfigError(`${context}: "storageState" must be a string (file path) or an object`);
 }
 
 function validateSnapshotSelectors(raw: unknown, context: string): string[] {
@@ -403,7 +425,9 @@ export function validateMultiStepFormConfig(data: unknown, sourceLabel: string):
 
   const waits = data.waits !== undefined ? validateWaitConditions(data.waits, context) : undefined;
 
-  return { name, url, openTrigger, dialogSelector, steps, success, snapshotSelectors, waits };
+  const storageState = data.storageState !== undefined ? validateStorageState(data.storageState, context) : undefined;
+
+  return { name, url, openTrigger, dialogSelector, steps, success, snapshotSelectors, waits, storageState };
 }
 
 /**

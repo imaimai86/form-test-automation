@@ -1,5 +1,6 @@
 import { chromium, Browser, Page } from "playwright";
 import { FormTestAutomationError } from "./errors";
+import { StorageState } from "./types";
 
 /** Raised when the browser can't load the form's URL at all. */
 export class NavigationError extends FormTestAutomationError {
@@ -21,6 +22,8 @@ export interface OpenFormPageOptions {
   timeoutMs?: number;
   /** Total navigation attempts before giving up (default 2, i.e. one retry). */
   retries?: number;
+  /** Reuse a previously-saved session (cookies + localStorage) instead of starting logged out. */
+  storageState?: StorageState;
 }
 
 /**
@@ -37,7 +40,23 @@ export async function openFormPage(url: string, options: OpenFormPageOptions = {
   const retries = options.retries ?? 2;
 
   const browser = await chromium.launch({ headless });
-  const page = await browser.newPage();
+
+  let page: Page;
+  try {
+    // Our own StorageState type is intentionally looser than Playwright's own
+    // (callers shouldn't need to import Playwright's internal cookie/origin
+    // types just to pass this through) — Playwright validates the actual
+    // shape at runtime, and a mismatch is caught below like any other
+    // failure to start the session.
+    const newPageOptions: Parameters<typeof browser.newPage>[0] = options.storageState
+      ? { storageState: options.storageState as never }
+      : {};
+    page = await browser.newPage(newPageOptions);
+  } catch (err) {
+    await browser.close();
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new NavigationError(`Could not start a browser session with the given storageState: ${reason}`);
+  }
 
   let lastError: unknown;
   for (let attempt = 1; attempt <= retries; attempt++) {

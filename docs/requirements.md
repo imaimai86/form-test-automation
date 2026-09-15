@@ -393,3 +393,30 @@ CLI (`fill-forms`) and the library exports already coexist in one package.
 20. Polish: README section on configuring this as an MCP server in Claude
     Code (`.mcp.json` snippet) and other clients, final regression across
     CLI/library/MCP, test reports.
+
+## Session Reuse via Playwright storageState
+
+Some forms sit behind a login the tool has no way to complete on its own
+(SSO, MFA, a login flow outside the scope of the form under test). Rather
+than build a generic "log in first" mechanism, or — worse — read cookies out
+of another Chrome profile on disk (fragile across OS/Chrome versions since
+cookie stores are encrypted at the OS level, and a real security concern
+since it would expose every site's session in that profile, not just the
+one being tested), the tool adopts Playwright's own standard mechanism.
+
+- **FR21 — `storageState`.** `FormConfig` and `MultiStepFormConfig` gain an
+  optional `storageState: string | object` field (a file path, or the state
+  already parsed) — Playwright's own cookies + per-origin localStorage
+  format, produced by `context.storageState()`. A user logs in once (by
+  hand, or with a short one-off Playwright script), saves the resulting
+  file, and points the config at it; every subsequent automated run starts
+  already authenticated. `openFormPage`/`OpenFormPageOptions` carries the
+  same option through at the library level, and the MCP `open_session` tool
+  exposes it directly as a parameter for interactive use. A malformed
+  storageState fails with a specific error at session-start time — never a
+  crash.
+
+This is deliberately scoped to *reusing* an existing session, not automating
+the login itself — capturing/refreshing the storageState file is the
+consumer's responsibility (typically a one-time manual step, or their own
+scripted login flow, outside this tool).

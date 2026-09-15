@@ -243,6 +243,21 @@ Verification)" for the tool surface and design.
 
 ---
 
+## 9. Session Reuse (storageState) Test Cases
+
+See `docs/requirements.md`, "Session Reuse via Playwright storageState" (FR21).
+
+| ID | Description | Preconditions | Steps | Expected Result | Priority | FR |
+|----|---|---|---|---|---|---|
+| SS-01 | No `storageState` configured | Fixture whose content depends on an auth cookie | Open the page normally | Page shows its logged-out state | P0 | FR21 |
+| SS-02 | `storageState` as a file path | Same fixture, a valid saved storageState file | `openFormPage(url, {storageState: path})` | Page shows its logged-in state | P0 | FR21 |
+| SS-03 | `storageState` as an inline object | Same fixture | `openFormPage(url, {storageState: {...}})` | Same as SS-02 | P0 | FR21 |
+| SS-04 | Malformed `storageState` | An object that doesn't match Playwright's expected shape | Attempt to open a session | Specific error at session-start time, not a crash or hang | P0 | FR21 |
+| SS-05 | `storageState` set on a `FormConfig`/`MultiStepFormConfig` | Config with `storageState` pointing at a valid file | Run any runner (e.g. `runHappyPathSubmission`) against the config | The session is authenticated for every case the runner opens, not just the first | P0 | FR21 |
+| SS-06 | MCP `open_session` with `storageState` | MCP server running | Call `open_session` with a `storageState` file path | Session opens already authenticated; `get_page_text`/`inspect_element` reflect the logged-in state | P0 | FR21 |
+
+---
+
 ## Coverage Notes
 
 - P0 cases are the target for loop increments 5-7 (validation + happy-path

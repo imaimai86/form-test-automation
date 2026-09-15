@@ -99,7 +99,7 @@ export async function runRequiredFieldValidation(
       continue;
     }
 
-    const session = await openFormPage(config.url, options);
+    const session = await openFormPage(config.url, { storageState: config.storageState, ...options });
     try {
       await performWaits(session.page, config.waits, timeoutMs);
       await fillFormFields(session.page, config.fields, {}, new Set([field.name]), timeoutMs);
@@ -153,7 +153,7 @@ export async function runFieldFormatValidation(
     }
 
     for (const invalidCase of formatCases) {
-      const session = await openFormPage(config.url, options);
+      const session = await openFormPage(config.url, { storageState: config.storageState, ...options });
       try {
         await performWaits(session.page, config.waits, timeoutMs);
         await fillFormFields(session.page, config.fields, { [field.name]: invalidCase.value }, new Set(), timeoutMs);
@@ -206,7 +206,7 @@ export async function runCrossFieldValidation(
 
   const results: ValidationCaseResult[] = [];
   for (const crossCase of cases) {
-    const session = await openFormPage(config.url, options);
+    const session = await openFormPage(config.url, { storageState: config.storageState, ...options });
     try {
       await performWaits(session.page, config.waits, timeoutMs);
       await fillFormFields(session.page, config.fields, crossCase.overrides, new Set(), timeoutMs);
@@ -259,7 +259,7 @@ export async function runDoubleSubmitCheck(
   options: OpenFormPageOptions & { timeoutMs?: number } = {}
 ): Promise<ValidationCaseResult> {
   const timeoutMs = options.timeoutMs ?? 10_000;
-  const session = await openFormPage(config.url, options);
+  const session = await openFormPage(config.url, { storageState: config.storageState, ...options });
   try {
     await performWaits(session.page, config.waits, timeoutMs);
     await fillFormFields(session.page, config.fields, {}, new Set(), timeoutMs);
@@ -323,7 +323,7 @@ export async function runBackButtonCheck(
   options: OpenFormPageOptions & { timeoutMs?: number } = {}
 ): Promise<ValidationCaseResult> {
   const timeoutMs = options.timeoutMs ?? 10_000;
-  const session = await openFormPage(config.url, options);
+  const session = await openFormPage(config.url, { storageState: config.storageState, ...options });
   try {
     await performWaits(session.page, config.waits, timeoutMs);
     await fillFormFields(session.page, config.fields, {}, new Set(), timeoutMs);
@@ -540,7 +540,7 @@ export async function runHappyPathSubmission(
   options: OpenFormPageOptions & { timeoutMs?: number; validate?: SubmissionValidator } = {}
 ): Promise<SubmissionResult> {
   const timeoutMs = options.timeoutMs ?? 10_000;
-  const session = await openFormPage(config.url, options);
+  const session = await openFormPage(config.url, { storageState: config.storageState, ...options });
 
   try {
     await performWaits(session.page, config.waits, timeoutMs);
@@ -635,7 +635,7 @@ export async function runMultiStepHappyPath(
   options: OpenFormPageOptions & { timeoutMs?: number; validate?: SubmissionValidator } = {}
 ): Promise<SubmissionResult> {
   const timeoutMs = options.timeoutMs ?? 10_000;
-  const session = await openFormPage(config.url, options);
+  const session = await openFormPage(config.url, { storageState: config.storageState, ...options });
 
   try {
     if (config.steps.length === 0) {
@@ -709,7 +709,7 @@ export async function runMultiStepStepValidation(
       }
 
       for (const invalidCase of cases) {
-        const session = await openFormPage(config.url, options);
+        const session = await openFormPage(config.url, { storageState: config.storageState, ...options });
         try {
           await advanceThroughSteps(session.page, config, stepIndex, timeoutMs);
           await performWaits(session.page, step.waits, timeoutMs);

@@ -182,7 +182,7 @@ session persists a real browser page across calls):
 
 | Tool | Purpose |
 |---|---|
-| `open_session(url, headless?)` | Opens a page, returns `sessionId` |
+| `open_session(url, headless?, storageState?)` | Opens a page, returns `sessionId`; pass `storageState` to start already logged in |
 | `close_session(sessionId)` | Closes it |
 | `discover_fields(sessionId, withinSelector?)` | Best-effort scan for form fields: selector, type, label, value, required |
 | `fill_field(sessionId, selector, type, value)` | Fills one field (all 10 field types) |
@@ -203,6 +203,41 @@ uses — `config` accepts a file path or an inline JSON object):
 | `validate_form_config(config)` | Schema check only, no browser launched |
 | `run_form_test(config, headless?, timeoutMs?)` | Full single-step suite |
 | `run_multistep_form_test(config, headless?, timeoutMs?)` | Full multi-step suite |
+
+## Testing forms behind a login (storageState)
+
+For a form behind SSO/MFA/a login flow this tool can't complete on its own,
+reuse an already-authenticated session instead of automating the login.
+Log in once (by hand, or with a one-off Playwright script) and save the
+session:
+
+```ts
+// one-time script, run manually
+import { chromium } from "playwright";
+const browser = await chromium.launch({ headless: false });
+const page = await browser.newPage();
+await page.goto("https://example.com/login");
+// ... log in manually in the opened window ...
+await page.context().storageState({ path: "auth.json" });
+await browser.close();
+```
+
+Then point a config at the saved file — every run starts already logged in:
+
+```json
+{
+  "name": "account-settings",
+  "url": "https://example.com/settings",
+  "storageState": "auth.json",
+  "submitSelector": "#save",
+  "fields": [ /* ... */ ],
+  "success": { "message": { "selector": "#saved" } }
+}
+```
+
+Works the same way as a library option (`runHappyPathSubmission(config, { storageState: "auth.json" })`)
+and as an MCP tool parameter (`open_session({ url, storageState: "auth.json" })`).
+`storageState` accepts either a file path or the state as an inline object.
 
 ## Writing a form config
 

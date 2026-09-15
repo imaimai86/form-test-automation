@@ -91,15 +91,19 @@ export function registerSessionTools(server: McpServer, sessions: Map<string, Se
     "open_session",
     {
       description:
-        "Opens a browser session at the given URL. Returns a sessionId to pass to every other session-scoped tool. Call close_session when done.",
+        "Opens a browser session at the given URL. Returns a sessionId to pass to every other session-scoped tool. Call close_session when done. Pass storageState to start already logged in (a Playwright storage-state file path, or the state as an inline object) instead of a fresh/logged-out session.",
       inputSchema: {
         url: z.string().describe("URL of the page to open"),
         headless: z.boolean().optional().describe("Run headless (default true)"),
+        storageState: z
+          .union([z.string(), z.record(z.string(), z.unknown())])
+          .optional()
+          .describe("Reuse a saved session (cookies + localStorage): a file path, or the state as an inline object"),
       },
     },
-    async ({ url, headless }) => {
+    async ({ url, headless, storageState }) => {
       try {
-        const session = await openFormPage(url, { headless });
+        const session = await openFormPage(url, { headless, storageState });
         const sessionId = randomUUID();
         sessions.set(sessionId, { session, lastUsed: Date.now() });
         return toolJson({ sessionId });

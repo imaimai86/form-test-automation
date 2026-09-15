@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { BrowserSession } from "../browser";
+import { registerSessionTools } from "./tools";
 
 // Not imported from "../index" to avoid a circular import (index.ts exports
 // startMcpServer from this file). Keep in sync with index.ts's VERSION.
@@ -49,13 +50,13 @@ export function createMcpServer(options: StartMcpServerOptions = {}): {
 
   const server = new McpServer({ name: "form-test-automation", version: MCP_SERVER_VERSION });
 
-  // Placeholder tool proving the protocol plumbing works end-to-end; real
-  // tools land in increments 18-19.
   server.registerTool(
     "ping",
     { description: "Health check — returns pong. Confirms the MCP server is reachable." },
     async () => ({ content: [{ type: "text" as const, text: "pong" }] })
   );
+
+  registerSessionTools(server, sessions);
 
   return { server, sessions, stopIdleCleanup: () => clearInterval(cleanupTimer) };
 }

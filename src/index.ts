@@ -18,6 +18,6 @@ export { runCrossFieldValidation, runDoubleSubmitCheck, runBackButtonCheck } fro
 export { runMultiStepHappyPath, runMultiStepStepValidation } from "./runner";
 export { computeFormReport, computeMultiStepFormReport, FormReport, MultiStepFormReport, FormTally } from "./report";
 
-export const VERSION = "0.1.0";
+export { VERSION } from "./version";
 
 export { startMcpServer, StartMcpServerOptions } from "./mcp/server";

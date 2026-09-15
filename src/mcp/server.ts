@@ -1,12 +1,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { BrowserSession } from "../browser";
+import { VERSION } from "../version";
 import { registerSessionTools } from "./tools";
 import { registerBatchTools } from "./batch-tools";
-
-// Not imported from "../index" to avoid a circular import (index.ts exports
-// startMcpServer from this file). Keep in sync with index.ts's VERSION.
-const MCP_SERVER_VERSION = "0.1.0";
 
 const DEFAULT_IDLE_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -49,7 +46,7 @@ export function createMcpServer(options: StartMcpServerOptions = {}): {
   );
   cleanupTimer.unref();
 
-  const server = new McpServer({ name: "html-automation-mcp", version: MCP_SERVER_VERSION });
+  const server = new McpServer({ name: "html-automation-mcp", version: VERSION });
 
   server.registerTool(
     "ping",

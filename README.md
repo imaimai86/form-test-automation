@@ -2,8 +2,10 @@
 
 Playwright-based automated testing for hosted HTML forms — declare a form's
 fields, validation rules, and success criteria in a JSON config, and this
-tool fills them, submits, and checks the results. Works as a standalone CLI
-(via `npx`) or as a library imported into another Node/TypeScript project.
+tool fills them, submits, and checks the results. Three interfaces, one
+package: a standalone CLI (via `npx`), a library imported into another
+Node/TypeScript project, and an MCP server so an AI agent can fill and
+verify forms through tool calls.
 
 ## Install
 
@@ -139,6 +141,67 @@ full detail:
 
 A mixed directory of single-step and multi-step config files works
 transparently — each file's shape is detected independently.
+
+## MCP server (AI-driven form filling and verification)
+
+The same package ships an MCP ([Model Context Protocol](https://modelcontextprotocol.io))
+server, so an AI agent can drive form filling and verification through tool
+calls — either exploring a form interactively with no pre-written config, or
+running the exact same test suites the CLI runs as a single tool call. Stdio
+transport only.
+
+**Claude Code** — add to `.mcp.json` in your project (or via `claude mcp add`):
+
+```json
+{
+  "mcpServers": {
+    "form-test-automation": {
+      "command": "npx",
+      "args": ["-y", "form-test-automation", "form-test-mcp"]
+    }
+  }
+}
+```
+
+(Any other MCP client that supports stdio servers configures the same way —
+point it at the `form-test-mcp` command.)
+
+**Embedding directly** (no separate process):
+
+```ts
+import { startMcpServer } from "form-test-automation";
+
+await startMcpServer({ idleTimeoutMs: 10 * 60 * 1000 }); // default shown
+```
+
+### Tools
+
+**Interactive** (explore and fill a form with no pre-written config — a
+session persists a real browser page across calls):
+
+| Tool | Purpose |
+|---|---|
+| `open_session(url, headless?)` | Opens a page, returns `sessionId` |
+| `close_session(sessionId)` | Closes it |
+| `discover_fields(sessionId, withinSelector?)` | Best-effort scan for form fields: selector, type, label, value, required |
+| `fill_field(sessionId, selector, type, value)` | Fills one field (all 10 field types) |
+| `click(sessionId, selector)` | Clicks an element |
+| `inspect_element(sessionId, selector)` | Reads a selector's matched/visible/text state |
+| `wait_for(sessionId, condition, timeoutMs?)` | Waits for a selector state, a value, or a fixed delay |
+| `get_page_text(sessionId)` | Visible page text (truncated) |
+
+A session left idle past `idleTimeoutMs` (default 10 minutes) is closed
+automatically, so a crashed or forgetful client doesn't leak browser
+processes — `close_session` remains the normal path.
+
+**Config-driven batch** (thin wrappers around the exact same runners the CLI
+uses — `config` accepts a file path or an inline JSON object):
+
+| Tool | Purpose |
+|---|---|
+| `validate_form_config(config)` | Schema check only, no browser launched |
+| `run_form_test(config, headless?, timeoutMs?)` | Full single-step suite |
+| `run_multistep_form_test(config, headless?, timeoutMs?)` | Full multi-step suite |
 
 ## Writing a form config
 

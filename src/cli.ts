@@ -2,47 +2,9 @@
 
 import * as fs from "node:fs";
 import { resolveConfigPaths, readJsonConfigFile, isMultiStepConfigData, validateFormConfig, validateMultiStepFormConfig } from "./config";
-import {
-  runRequiredFieldValidation,
-  runFieldFormatValidation,
-  runHappyPathSubmission,
-  runCrossFieldValidation,
-  runDoubleSubmitCheck,
-  runBackButtonCheck,
-  runMultiStepStepValidation,
-  runMultiStepHappyPath,
-  ValidationCaseResult,
-  SubmissionResult,
-} from "./runner";
+import { computeFormReport, computeMultiStepFormReport, FormReport, MultiStepFormReport, FormTally } from "./report";
+import { ValidationCaseResult, SubmissionResult } from "./runner";
 import { FormConfig, MultiStepFormConfig } from "./types";
-
-interface FormTally {
-  passed: number;
-  failed: number;
-  skipped: number;
-}
-
-interface FormReport {
-  kind: "single";
-  name: string;
-  url: string;
-  requiredFieldValidation: ValidationCaseResult[];
-  formatValidation: ValidationCaseResult[];
-  crossFieldValidation: ValidationCaseResult[];
-  happyPathSubmission: SubmissionResult;
-  doubleSubmit: ValidationCaseResult;
-  backButton: ValidationCaseResult;
-  summary: FormTally;
-}
-
-interface MultiStepFormReport {
-  kind: "multi";
-  name: string;
-  url: string;
-  stepValidation: ValidationCaseResult[];
-  happyPathSubmission: SubmissionResult;
-  summary: FormTally;
-}
 
 interface JsonReport {
   generatedAt: string;
@@ -54,20 +16,14 @@ function tagFor(status: "passed" | "failed" | "skipped"): string {
   return status === "passed" ? "PASS" : status === "skipped" ? "SKIP" : "FAIL";
 }
 
-function printCaseResults(label: string, results: ValidationCaseResult[], tally: FormTally): void {
+function printCaseResults(label: string, results: ValidationCaseResult[]): void {
   for (const r of results) {
-    tally[r.status]++;
     const suffix = r.value ? ` ("${r.value}")` : "";
     console.log(`  [${tagFor(r.status)}] ${label} - ${r.fieldName}${suffix}: ${r.message}`);
   }
 }
 
-function printSubmissionResult(label: string, submission: SubmissionResult, tally: FormTally): void {
-  if (submission.status === "passed") {
-    tally.passed++;
-  } else {
-    tally.failed++;
-  }
+function printSubmissionResult(label: string, submission: SubmissionResult): void {
   console.log(`  [${submission.status === "passed" ? "PASS" : "FAIL"}] ${label}: ${submission.message}`);
   for (const check of submission.checks) {
     console.log(`      - ${check.criterion}: ${check.passed ? "PASS" : "FAIL"} - ${check.message}`);
@@ -76,73 +32,28 @@ function printSubmissionResult(label: string, submission: SubmissionResult, tall
 
 async function runForm(config: FormConfig): Promise<FormReport> {
   console.log(`\n${config.name} (${config.url})`);
+  const report = await computeFormReport(config);
 
-  const tally: FormTally = { passed: 0, failed: 0, skipped: 0 };
+  printCaseResults("required-field validation", report.requiredFieldValidation);
+  printCaseResults("format/pattern validation", report.formatValidation);
+  printCaseResults("cross-field validation", report.crossFieldValidation);
+  printSubmissionResult("happy-path submission", report.happyPathSubmission);
+  console.log(`  [${tagFor(report.doubleSubmit.status)}] double-submit check: ${report.doubleSubmit.message}`);
+  console.log(`  [${tagFor(report.backButton.status)}] back-button check: ${report.backButton.message}`);
+  console.log(`  Summary: ${report.summary.passed} passed, ${report.summary.failed} failed, ${report.summary.skipped} skipped`);
 
-  const required = await runRequiredFieldValidation(config);
-  printCaseResults("required-field validation", required, tally);
-
-  const format = await runFieldFormatValidation(config);
-  printCaseResults("format/pattern validation", format, tally);
-
-  const crossField = await runCrossFieldValidation(config);
-  printCaseResults("cross-field validation", crossField, tally);
-
-  const submission = await runHappyPathSubmission(config);
-  printSubmissionResult("happy-path submission", submission, tally);
-
-  const doubleSubmit = await runDoubleSubmitCheck(config);
-  tally[doubleSubmit.status]++;
-  console.log(`  [${tagFor(doubleSubmit.status)}] double-submit check: ${doubleSubmit.message}`);
-
-  const backButton = await runBackButtonCheck(config);
-  tally[backButton.status]++;
-  console.log(`  [${tagFor(backButton.status)}] back-button check: ${backButton.message}`);
-
-  console.log(`  Summary: ${tally.passed} passed, ${tally.failed} failed, ${tally.skipped} skipped`);
-
-  return {
-    kind: "single",
-    name: config.name,
-    url: config.url,
-    requiredFieldValidation: required,
-    formatValidation: format,
-    crossFieldValidation: crossField,
-    happyPathSubmission: submission,
-    doubleSubmit,
-    backButton,
-    summary: tally,
-  };
+  return report;
 }
 
-/**
- * Unlike the single-step path, a multi-step form has no separate
- * required-field vs. format-validation runners — runMultiStepStepValidation
- * covers both empty-value and non-empty invalidValues cases per step in one
- * pass, so it's reported here as one "step validation" section rather than
- * two.
- */
 async function runMultiStepForm(config: MultiStepFormConfig): Promise<MultiStepFormReport> {
   console.log(`\n${config.name} (${config.url}) [multi-step]`);
+  const report = await computeMultiStepFormReport(config);
 
-  const tally: FormTally = { passed: 0, failed: 0, skipped: 0 };
+  printCaseResults("step validation", report.stepValidation);
+  printSubmissionResult("happy-path submission", report.happyPathSubmission);
+  console.log(`  Summary: ${report.summary.passed} passed, ${report.summary.failed} failed, ${report.summary.skipped} skipped`);
 
-  const stepValidation = await runMultiStepStepValidation(config);
-  printCaseResults("step validation", stepValidation, tally);
-
-  const submission = await runMultiStepHappyPath(config);
-  printSubmissionResult("happy-path submission", submission, tally);
-
-  console.log(`  Summary: ${tally.passed} passed, ${tally.failed} failed, ${tally.skipped} skipped`);
-
-  return {
-    kind: "multi",
-    name: config.name,
-    url: config.url,
-    stepValidation,
-    happyPathSubmission: submission,
-    summary: tally,
-  };
+  return report;
 }
 
 type LoadedConfig = { kind: "single"; config: FormConfig } | { kind: "multi"; config: MultiStepFormConfig };

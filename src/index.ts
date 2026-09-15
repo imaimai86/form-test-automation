@@ -16,6 +16,7 @@ export { runRequiredFieldValidation, runFieldFormatValidation, ValidationCaseRes
 export { runHappyPathSubmission, SubmissionResult, SuccessCheckResult, SuccessCriterionKind, SnapshotEntry, SubmissionValidator } from "./runner";
 export { runCrossFieldValidation, runDoubleSubmitCheck, runBackButtonCheck } from "./runner";
 export { runMultiStepHappyPath, runMultiStepStepValidation } from "./runner";
+export { computeFormReport, computeMultiStepFormReport, FormReport, MultiStepFormReport, FormTally } from "./report";
 
 export const VERSION = "0.1.0";
 

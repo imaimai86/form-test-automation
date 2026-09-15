@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { BrowserSession } from "../browser";
 import { registerSessionTools } from "./tools";
+import { registerBatchTools } from "./batch-tools";
 
 // Not imported from "../index" to avoid a circular import (index.ts exports
 // startMcpServer from this file). Keep in sync with index.ts's VERSION.
@@ -57,6 +58,7 @@ export function createMcpServer(options: StartMcpServerOptions = {}): {
   );
 
   registerSessionTools(server, sessions);
+  registerBatchTools(server);
 
   return { server, sessions, stopIdleCleanup: () => clearInterval(cleanupTimer) };
 }

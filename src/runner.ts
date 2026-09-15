@@ -4,6 +4,7 @@ import { closeSession, openFormPage, OpenFormPageOptions } from "./browser";
 import { fillField } from "./fields";
 import { FormTestAutomationError } from "./errors";
 import { performWaits } from "./waits";
+import { ElementState, inspectElements } from "./inspect";
 
 export type ValidationCaseStatus = "passed" | "failed" | "skipped";
 
@@ -373,12 +374,13 @@ export interface SuccessCheckResult {
   message: string;
 }
 
-/** One selector's captured state at submission time: did it match anything, was it visible, and its text. */
-export interface SnapshotEntry {
-  matched: boolean;
-  visible: boolean;
-  text: string;
-}
+/**
+ * One selector's captured state at submission time: did it match anything,
+ * was it visible, and its text. Same shape as `ElementState` from
+ * `./inspect` — kept as its own exported name since it's part of the public
+ * `SubmissionResult` shape.
+ */
+export type SnapshotEntry = ElementState;
 
 export interface SubmissionResult {
   status: "passed" | "failed";
@@ -457,15 +459,7 @@ async function checkResponseCriterion(
 
 async function captureSnapshot(page: Page, selectors: string[] | undefined): Promise<Record<string, SnapshotEntry> | undefined> {
   if (!selectors || selectors.length === 0) return undefined;
-  const snapshot: Record<string, SnapshotEntry> = {};
-  for (const selector of selectors) {
-    const locator = page.locator(selector);
-    const matched = (await locator.count()) > 0;
-    const visible = matched ? await locator.first().isVisible().catch(() => false) : false;
-    const text = matched ? ((await locator.first().textContent().catch(() => "")) ?? "").trim() : "";
-    snapshot[selector] = { matched, visible, text };
-  }
-  return snapshot;
+  return inspectElements(page, selectors);
 }
 
 /**

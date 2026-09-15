@@ -11,6 +11,7 @@ export { readJsonConfigFile, resolveConfigPaths } from "./config";
 export { openFormPage, closeSession, BrowserSession, OpenFormPageOptions, NavigationError } from "./browser";
 export { fillField, FieldFiller, FieldNotFoundError, FieldFillError } from "./fields";
 export { performWaits } from "./waits";
+export { inspectElement, inspectElements, ElementState } from "./inspect";
 export { runRequiredFieldValidation, runFieldFormatValidation, ValidationCaseResult, ValidationCaseStatus } from "./runner";
 export { runHappyPathSubmission, SubmissionResult, SuccessCheckResult, SuccessCriterionKind, SnapshotEntry, SubmissionValidator } from "./runner";
 export { runCrossFieldValidation, runDoubleSubmitCheck, runBackButtonCheck } from "./runner";

@@ -278,6 +278,10 @@ not implemented yet.
 
 ## Changelog
 
+### Unreleased
+
+- Changed license from The Unlicense to MIT.
+
 ### 0.1.2
 
 - Added `get_fill_plan` MCP tool — config in, data out, no browser opened.
@@ -321,4 +325,4 @@ under [`tests/result/`](tests/result/), one folder per feature.
 
 ## License
 
-[The Unlicense](LICENSE) — public domain. Use it for anything, no attribution required.
+[MIT](LICENSE) © imaimai86

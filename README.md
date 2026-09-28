@@ -1,5 +1,8 @@
 # html-automation-mcp
 
+[![CI](https://github.com/imaimai86/form-test-automation/actions/workflows/ci.yml/badge.svg)](https://github.com/imaimai86/form-test-automation/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/html-automation-mcp.svg)](https://www.npmjs.com/package/html-automation-mcp)
+
 Playwright-based automated testing for hosted HTML forms — declare a form's
 fields, validation rules, and success criteria in a JSON config, and this
 tool fills them, submits, and checks the results. Three interfaces, one
@@ -311,6 +314,50 @@ not implemented yet.
   snapshots, a custom `validate` hook, and a `waits` primitive.
 
 See [GitHub Releases](https://github.com/imaimai86/form-test-automation/releases) for details.
+
+## How this was built
+
+This project is **AI-first, developer-in-the-loop**: [Claude Code](https://claude.com/claude-code)
+wrote essentially all of the code, docs, and tests, following a
+requirements-then-tests-then-code process with a manual review gate before
+each phase — the AI did not run unsupervised.
+
+1. **Requirements gathering.** Scope started as a short prompt and was
+   pinned down through an interactive requirements interview — the same
+   back-and-forth Claude Code's `grill-me`/`AskUserQuestion` skills use to
+   force scope decisions (hosted-forms-only for v1, local/PDF forms
+   deferred, delivery via `/loop`) into the open instead of assuming them.
+2. **Implementation plan, then a manual review gate.** The AI proposed a
+   plan for the requirements/test-case docs and the delivery roadmap; the
+   developer reviewed it and only then was it approved to proceed — nothing
+   downstream started on an unreviewed plan.
+3. **Test plan and test cases, written before any implementation code.**
+   [`docs/requirements.md`](docs/requirements.md) and
+   [`docs/test-cases.md`](docs/test-cases.md) (functional requirements, the
+   form config schema, and a large edge-case checklist — Unicode input,
+   injection payloads, async validation races, double-submit, and similar)
+   were finished before the first line of implementation was written.
+4. **Iterative develop/fix via `/loop`.** Each loop iteration took one
+   feature or issue, wrote the code, ran the test cases relevant to that
+   change, and rebuilt/fixed until they passed — a field handler, multi-step
+   wizard support, the MCP server, `storageState` login reuse, and so on,
+   each landing as its own reviewed, verified increment rather than one
+   large unreviewed pass. A report per feature lives under
+   [`tests/result/`](tests/result/); increments touching real design
+   tradeoffs (the multi-step wizard mechanism, the MCP architecture, what an
+   agent-orchestrated `get_fill_plan` tool can and can't do) were walked
+   through and approved by the developer rather than shipped on the AI's
+   say-so.
+5. **The developer held anything sensitive or irreversible.** Credentials,
+   npm 2FA/OTP, and publish approvals were always entered by the developer
+   directly, never passed through a command the AI ran; the license change
+   and package name were explicit developer calls made after the AI laid
+   out the tradeoffs.
+
+The result is a package where an AI wrote the bulk of the implementation,
+but a human owned every decision above the line of "does this code work" —
+both docs above and the verification trail in `tests/result/` are there so
+that's checkable, not just claimed.
 
 ## Development
 

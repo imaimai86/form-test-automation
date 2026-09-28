@@ -37,6 +37,14 @@
   ],
   "author": "imaimai86",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/imaimai86/form-test-automation.git"
+  },
+  "homepage": "https://github.com/imaimai86/form-test-automation#readme",
+  "bugs": {
+    "url": "https://github.com/imaimai86/form-test-automation/issues"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
     "playwright": "^1.47.0",

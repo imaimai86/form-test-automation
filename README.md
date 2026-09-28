@@ -278,7 +278,7 @@ not implemented yet.
 
 ## Changelog
 
-### Unreleased
+### 0.1.3
 
 - Changed license from The Unlicense to MIT.
 
